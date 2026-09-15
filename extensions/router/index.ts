@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { isRetryableAssistantError } from "@earendil-works/pi-ai";
 import { classifyError, Router, validateConfig, type RouterConfig, type Target } from "./core.ts";
 
 const ENTRY = "scoby-router";
@@ -146,6 +147,36 @@ export function setupRouter(pi: ExtensionAPI, cfg: RouterConfig, configPath: str
 
 		const next = await select(ctx, `${verdict.kind}${verdict.status ? " " + verdict.status : ""} on ${failedRaw}`, [failedRaw]);
 		if (ctx.hasUI && next) ctx.ui.notify(`scoby: ${failedRaw} → ${next.raw} (${verdict.kind})`, "warning");
+	});
+
+	// pi only auto-retries errors on its own pattern list (overloaded, 429, 5xx, network...).
+	// A failover-worthy error outside that list ends the run even though we already switched
+	// the model. So at agent_end — before pi decides to stop — queue a follow-up that resumes
+	// the task on the new target. (agent_settled is too late: in print mode the session is
+	// already being torn down there; found in test/router/run-glitch.sh.)
+	const MAX_RESUMES = 5;
+	let resumes = 0;
+	pi.on("agent_end", async (event: any) => {
+		const lastMsg = [...(event.messages ?? [])].reverse().find((m: any) => m.role === "assistant");
+		if (!lastMsg || lastMsg.stopReason !== "error") return;
+		if (isRetryableAssistantError(lastMsg)) return; // pi retries this itself, on the model we already switched to
+		const verdict = classifyError(lastMsg.errorMessage ?? "");
+		if (!verdict.failover || !current) return;
+		if (router.coolingUntil(current.raw) > Date.now()) return; // nothing healthy to resume on
+		if (resumes >= MAX_RESUMES) {
+			record("resume_cap", { target: current.raw, resumes });
+			return;
+		}
+		resumes++;
+		record("resume", { target: current.raw, after: verdict.kind, resumes });
+		pi.sendMessage(
+			{
+				customType: "scoby-resume",
+				content: `[scoby] The previous model failed mid-task (${verdict.kind}); you are now on ${current.raw}. Continue the task from where it stopped — do not start over.`,
+				display: true,
+			},
+			{ triggerTurn: true, deliverAs: "followUp" },
+		);
 	});
 
 	pi.registerCommand("role", {

@@ -103,7 +103,7 @@ export function validateConfig(cfg: RouterConfig): string[] {
 	return errors;
 }
 
-export type ErrorKind = "rate_limit" | "overloaded" | "auth" | "network" | "other";
+export type ErrorKind = "rate_limit" | "overloaded" | "auth" | "network" | "provider_error" | "other";
 
 export interface Classified {
 	kind: ErrorKind;
@@ -128,8 +128,11 @@ export function classifyError(message: string): Classified {
 	if (status === 401 || status === 402 || status === 403 || /payment required|invalid api key|unauthori[sz]ed/i.test(msg))
 		return { kind: "auth", status, failover: true };
 	if (/ECONNREFUSED|ECONNRESET|ETIMEDOUT|socket|fetch failed|network/i.test(msg)) return { kind: "network", status, failover: true };
-	// 400s are usually OUR bug (e.g. a thinking level the model rejects) — failing over would hide it
-	return { kind: "other", status, failover: false };
+	// An explicit 4xx is usually OUR bug (e.g. a thinking level the model rejects) — failing over would hide it.
+	if (status !== undefined && status >= 400 && status < 500) return { kind: "other", status, failover: false };
+	// No status and no known wording: a provider-side crash leaking through (seen live on NIM gpt-oss-20b
+	// mid-run: "list index out of range"). Not our request's fault — try the next target.
+	return { kind: "provider_error", status, failover: true };
 }
 
 export class Router {

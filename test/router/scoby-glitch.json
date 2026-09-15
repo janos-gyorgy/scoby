@@ -1,0 +1,8 @@
+{
+  "connections": {
+    "glitch": { "baseUrl": "http://127.0.0.1:18182/glitch/v1", "models": [{ "id": "glitch-model" }] },
+    "good":   { "baseUrl": "http://127.0.0.1:18182/good/v1",   "models": [{ "id": "good-model" }] }
+  },
+  "roles": { "builder": ["glitch/glitch-model", "good/good-model"] },
+  "defaultRole": "builder"
+}

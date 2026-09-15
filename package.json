@@ -6,7 +6,8 @@
     "test": "node --experimental-strip-types --no-warnings --test extensions/router/core.test.ts extensions/compaction/shaper.test.ts",
     "test:router": "test/router/run.sh",
     "test:failover": "test/failover/run.sh",
-    "test:compaction": "test/compaction/run.sh"
+    "test:compaction": "test/compaction/run.sh",
+    "test:resume": "test/router/run-glitch.sh"
   },
   "author": "",
   "license": "ISC",

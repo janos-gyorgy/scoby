@@ -47,6 +47,8 @@ test("classifyError on the real strings seen from pi", () => {
 	assert.equal(classifyError(`{"message":"Payment required to access this resource.","code":"payment_required"}`).kind, "auth");
 	const thinking400 = `{"error":{"message":"{\\n  \\"error\\": {\\n    \\"code\\": 400,\\n    \\"message\\": \\"Thinking level MINIMAL is not supported`;
 	assert.deepEqual(classifyError(thinking400), { kind: "other", status: 400, failover: false });
+	// seen live from NIM gpt-oss-20b on the second turn of a real run
+	assert.deepEqual(classifyError("list index out of range"), { kind: "provider_error", status: undefined, failover: true });
 });
 
 test("Router walks the chain, cools failed targets, and recovers", () => {

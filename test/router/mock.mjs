@@ -27,6 +27,12 @@ http
 				res.writeHead(503, { "content-type": "application/json" });
 				return res.end(JSON.stringify({ error: { code: 503, message: "This model is currently experiencing high demand. (mock)", status: "UNAVAILABLE" } }));
 			}
+			if (req.url.startsWith("/glitch/")) {
+				// 200 + an error object in the stream: how NIM surfaced "list index out of range" mid-run
+				res.writeHead(200, { "content-type": "text/event-stream" });
+				res.write(`data: ${JSON.stringify({ error: { message: "list index out of range", type: "internal" } })}\n\n`);
+				return res.end("data: [DONE]\n\n");
+			}
 			if (req.url.startsWith("/good/")) {
 				res.writeHead(200, { "content-type": "text/event-stream" });
 				const chunk = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
