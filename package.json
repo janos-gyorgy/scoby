@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "description": "A free Kimchi: pi extensions for role routing across free-tier APIs, with budget-first compaction",
   "scripts": {
+    "test": "node --experimental-strip-types --no-warnings --test extensions/router/core.test.ts",
+    "test:router": "test/router/run.sh",
     "test:failover": "test/failover/run.sh"
   },
   "author": "",
@@ -13,5 +15,10 @@
   "private": true,
   "engines": {
     "node": ">=22.19.0"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/router/index.ts"
+    ]
   }
 }

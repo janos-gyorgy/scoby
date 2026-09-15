@@ -2,3 +2,5 @@ node_modules/
 *.log
 test/failover/mock.out
 test/failover/run.out
+test/router/mock.out
+test/router/answer.out

@@ -1,0 +1,66 @@
+# scoby
+
+A free Kimchi, as [pi](https://github.com/earendil-works/pi) extensions: define as many
+inference connections as you like, map roles to ordered chains of models, and let the
+session fail over when a free tier says no. Next up: budget-first compaction, so each
+request fits the limits free tiers actually allow.
+
+Personal project / blog material. **No maintenance promised.**
+
+## Router
+
+```
+pi -e ./extensions/router/index.ts            # uses .scoby.json, $SCOBY_CONFIG, or ~/.config/scoby/config.json
+pi -e ./extensions/router/index.ts --role planner
+```
+
+Config (see `scoby.example.json`):
+
+- **connections**: either a pi built-in provider (`{"provider": "groq"}`; key from pi's usual
+  env var, e.g. `GROQ_API_KEY`, `GEMINI_API_KEY`) or a custom OpenAI-compatible endpoint
+  (`baseUrl`, `apiKeyEnv`, `models`).
+- **roles**: ordered targets `connection/model-id[:thinking]`. The first healthy one serves;
+  the rest are the failover chain.
+- **failover**: `cooldownSeconds` after a rate limit/overload (default 60),
+  `authCooldownSeconds` after a missing key / 401 / 402 / 403 (default 1800).
+
+In the TUI: `/role [name]` shows or switches the role, `/router` shows each target and its
+cooldown. Every decision is saved in the session as a `scoby-router` custom entry, with a reason.
+
+### How failover works
+
+pi already retries a failed turn (agent-level retry, backoff 2s/4s/8s). When an assistant
+message ends in a retryable error, the router puts the failed target on cooldown and switches
+the session model *before* that retry starts, so the retry lands on the next target.
+
+| Error | Failover? |
+|---|---|
+| 429, "rate limit", "quota", RESOURCE_EXHAUSTED | yes, cooldown |
+| 5xx, "high demand", UNAVAILABLE | yes, cooldown |
+| 401 / 402 / 403, payment required | yes, long cooldown |
+| network errors | yes |
+| 400 and anything else | **no**, a 400 is usually a config bug (e.g. an unsupported thinking level); hiding it would be worse |
+
+## Known limits (found while building)
+
+- **Retry budget**: failover rides on pi's `retry.maxRetries` (default 3), so one turn can walk
+  at most 4 targets. Raise it in `~/.pi/agent/settings.json` for longer chains.
+- **Cooldowns live in memory**, per pi process, not shared across sessions.
+- pi's `after_provider_response` hook **does not fire on a 429**, so detection uses
+  `message_end` (`stopReason: "error"`) instead.
+- A model switch **carries the previous thinking level** unless you set one: a non-reasoning
+  model's level reached Gemini 3.8 Flash as MINIMAL and got a 400. The router always sets it:
+  an explicit `:level`, else `low` for reasoning models and `off` for others.
+- pi's model catalog knows context windows, not free-tier limits (Groq gpt-oss-120b: 131K
+  window, but 8K tokens/minute free). That is what compaction has to solve.
+- `pi -p` reads piped stdin: close it (`< /dev/null`) in scripts.
+
+## Tests
+
+```
+npm test               # router core: parsing, validation, error classification, chain walking
+npm run test:router    # e2e through the real extension: mock 429 -> 503 -> good, must PASS
+npm run test:failover  # the original probe that proved message_end + setModel works
+```
+
+Needs Node >= 22.19.

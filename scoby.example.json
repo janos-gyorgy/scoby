@@ -1,0 +1,18 @@
+{
+  "connections": {
+    "gemini": { "provider": "google" },
+    "groq":   { "provider": "groq" },
+    "nim": {
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "apiKeyEnv": "NVIDIA_API_KEY",
+      "models": [{ "id": "moonshotai/kimi-k3", "reasoning": true, "contextWindow": 128000, "maxTokens": 8192 }]
+    }
+  },
+  "roles": {
+    "planner": ["gemini/gemini-3.8-flash:low", "groq/openai/gpt-oss-120b", "nim/moonshotai/kimi-k3"],
+    "builder": ["gemini/gemini-3.5-flash:low", "groq/qwen/qwen3.6-27b", "groq/openai/gpt-oss-120b"],
+    "judge":   ["groq/openai/gpt-oss-120b", "gemini/gemini-3.8-flash:low"]
+  },
+  "defaultRole": "builder",
+  "failover": { "cooldownSeconds": 60, "authCooldownSeconds": 1800 }
+}
