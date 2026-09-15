@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "description": "A free Kimchi: pi extensions for role routing across free-tier APIs, with budget-first compaction",
   "scripts": {
-    "test": "node --experimental-strip-types --no-warnings --test extensions/router/core.test.ts extensions/compaction/shaper.test.ts extensions/compaction/fold.test.ts",
+    "test": "node --experimental-strip-types --no-warnings --test extensions/router/core.test.ts extensions/compaction/shaper.test.ts extensions/compaction/fold.test.ts extensions/guard/gates.test.ts",
     "test:router": "test/router/run.sh",
     "test:failover": "test/failover/run.sh",
     "test:compaction": "test/compaction/run.sh",
-    "test:resume": "test/router/run-glitch.sh"
+    "test:resume": "test/router/run-glitch.sh",
+    "test:guard": "test/guard/run.sh",
+    "test:all": "npm test && npm run test:router && npm run test:resume && npm run test:compaction && npm run test:guard"
   },
   "author": "",
   "license": "ISC",

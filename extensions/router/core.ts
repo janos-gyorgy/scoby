@@ -45,6 +45,12 @@ export interface RouterConfig {
 		/** fold when old unfolded content reaches this share of the per-request budget (default 0.25) */
 		foldGateShare?: number;
 	};
+	finish?: {
+		/** commands (no shell) that must show no NEW errors vs. session start before a run may end */
+		gates?: string[];
+		/** follow-ups with gate errors before giving up (default 3) */
+		maxNudges?: number;
+	};
 	failover?: {
 		/** seconds a target sits out after a rate limit / overload (default 60) */
 		cooldownSeconds?: number;

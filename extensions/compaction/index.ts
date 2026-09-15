@@ -27,16 +27,26 @@ export interface CompactionHandle {
 export function setupCompaction(pi: ExtensionAPI, cfg: RouterConfig, router: RouterHandle | undefined): CompactionHandle {
 	pi.registerFlag("budget", { description: "scoby: input-token budget per request (overrides config)", type: "string" });
 
-	const cpt = new Map<string, number>(); // provider -> calibrated chars per token
+	// Calibration, per provider. The shaper estimates in its own units (pi's internal message JSON /
+	// DEFAULT_CPT) and the fixed overhead is estimated from the wire payload. Rather than trusting
+	// either, `scale` = real input tokens / our estimate for that request, as a moving average.
+	// Found in the first real run: payload-minus-messages went negative (pi's internal messages carry
+	// usage/model metadata the wire payload doesn't), fixed overhead read 0, and requests reached
+	// 31.6K real tokens on a 32K budget without the shaper ever triggering.
+	const scale = new Map<string, number>();
 	let fixedTokens = DEFAULT_FIXED;
-	let last: { report: ShapeReport; budget: number; shapedChars: number; payloadChars?: number; provider: string } | undefined;
+	let last: { report: ShapeReport; budget: number; provider: string; available: number; payloadChars?: number } | undefined;
 	let folds: FoldBlock[] = [];
 	let foldsSeen = -1;
 	let lastInput: Msg[] | undefined; // unshaped context of the latest request — what a fold looks at
 	let folding = false;
 
 	const providerOf = (ctx: ExtensionContext) => ctx.model?.provider ?? "unknown";
-	const charsPerToken = (provider: string) => cpt.get(provider) ?? DEFAULT_CPT;
+	const charsPerToken = (_provider: string) => DEFAULT_CPT;
+	const scaleOf = (provider: string) => scale.get(provider) ?? 1;
+	/** tokens the messages may take, in the shaper's units, for this budget */
+	// 5% headroom: the scale only learns after the first responses
+	const availableFor = (b: number, provider: string) => Math.max(500, Math.floor((0.95 * b) / scaleOf(provider)) - fixedTokens);
 
 	function budget(ctx: ExtensionContext): number {
 		const flag = Number(pi.getFlag("budget"));
@@ -62,24 +72,29 @@ export function setupCompaction(pi: ExtensionAPI, cfg: RouterConfig, router: Rou
 		const b = budget(ctx);
 		const messages = event.messages as unknown as Msg[];
 		lastInput = messages;
+		const available = availableFor(b, provider);
 		const { messages: shaped, report } = shape(messages, {
-			available: Math.max(500, b - fixedTokens),
+			available,
 			charsPerToken: charsPerToken(provider),
 			recentShare: cfg.compaction?.recentShare ?? 0.5,
 			folds: loadFolds(ctx),
 		});
-		last = { report, budget: b, shapedChars: JSON.stringify(shaped).length, provider };
+		last = { report, budget: b, provider, available };
 		if (shaped === messages) return; // untouched: keep the exact prefix
 		return { messages: shaped as any };
 	});
 
 	pi.on("before_provider_request", (event) => {
 		if (!last) return;
-		const payloadChars = JSON.stringify(event.payload ?? {}).length;
-		last.payloadChars = payloadChars;
-		// everything that isn't our messages is fixed overhead: system prompt, tool schemas, framing
-		const fixedChars = Math.max(0, payloadChars - last.shapedChars);
-		fixedTokens = Math.ceil(fixedChars / charsPerToken(last.provider));
+		const payload: any = event.payload ?? {};
+		last.payloadChars = JSON.stringify(payload).length;
+		// fixed overhead = the payload minus its conversation part, whatever the provider calls it
+		const conversation = payload.messages ?? payload.contents ?? payload.input;
+		if (Array.isArray(conversation)) {
+			const system = conversation.filter((m: any) => m.role === "system" || m.role === "developer");
+			const fixedChars = last.payloadChars - JSON.stringify(conversation).length + JSON.stringify(system).length;
+			if (fixedChars > 0) fixedTokens = Math.ceil(fixedChars / DEFAULT_CPT);
+		}
 	});
 
 	pi.on("message_end", async (event: any, ctx) => {
@@ -87,11 +102,11 @@ export function setupCompaction(pi: ExtensionAPI, cfg: RouterConfig, router: Rou
 		if (!m || m.role !== "assistant" || !last) return;
 		const u = m.usage ?? {};
 		const actualInput = (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
-		const before = charsPerToken(last.provider);
-		if (actualInput > 200 && last.payloadChars) {
-			// exponential moving average, so one odd response doesn't swing the estimate
-			const observed = last.payloadChars / actualInput;
-			cpt.set(last.provider, Number((before * 0.7 + observed * 0.3).toFixed(3)));
+		const estimated = fixedTokens + last.report.after; // what we thought this request would cost
+		const scaleBefore = scaleOf(last.provider);
+		if (actualInput > 500 && estimated > 0) {
+			// moving average of real/estimated, so one odd response doesn't swing it
+			scale.set(last.provider, Number((scaleBefore * 0.6 + (actualInput / estimated) * 0.4).toFixed(3)));
 		}
 		const { elided, ...report } = last.report;
 		pi.appendEntry(BUDGET_ENTRY, {
@@ -101,10 +116,10 @@ export function setupCompaction(pi: ExtensionAPI, cfg: RouterConfig, router: Rou
 			...report,
 			elidedCount: elided.length,
 			payloadChars: last.payloadChars,
-			estimatedInput: last.payloadChars ? Math.ceil(last.payloadChars / before) : undefined,
+			estimatedInput: Math.ceil(estimated * scaleBefore),
 			actualInput: actualInput || undefined,
 			output: u.output,
-			charsPerToken: charsPerToken(last.provider),
+			scale: scaleOf(last.provider),
 			stopReason: m.stopReason,
 		});
 	});
@@ -117,7 +132,7 @@ export function setupCompaction(pi: ExtensionAPI, cfg: RouterConfig, router: Rou
 		// model sees (the shaper leaves under-budget requests alone) and would just spend quota
 		if (!last || last.report.before <= last.report.available) return;
 		const provider = providerOf(ctx);
-		const available = Math.max(500, budget(ctx) - fixedTokens);
+		const available = availableFor(budget(ctx), provider);
 		const candidate = selectFold(lastInput, {
 			available,
 			charsPerToken: charsPerToken(provider),
@@ -183,7 +198,7 @@ export function setupCompaction(pi: ExtensionAPI, cfg: RouterConfig, router: Rou
 			if (!entry) return { content: [{ type: "text", text: `recall: no tool output with ref "${params.ref}"` }], isError: true, details: {} };
 			const text = (entry.message.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
 			// hand back at most ~30% of the budget in one go, so a recall can't blow the next request
-			const max = Math.floor(0.3 * budget(ctx) * charsPerToken(providerOf(ctx)));
+			const max = Math.floor(0.3 * availableFor(budget(ctx), providerOf(ctx)) * DEFAULT_CPT);
 			const start = Math.max(0, params.offset ?? 0);
 			const slice = text.slice(start, start + max);
 			const more = start + max < text.length ? `\n[scoby: ${text.length - start - max} more chars — recall("${params.ref}", offset=${start + max})]` : "";

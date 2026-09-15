@@ -9,3 +9,6 @@ test/compaction/mock-*.out
 test/compaction/answer-*.out
 test/compaction/sessions-*/
 test/compaction/requests-*-folds.jsonl
+test/guard/requests.jsonl
+test/guard/*.out
+test/guard/scoby.json
