@@ -8,3 +8,4 @@ test/compaction/requests-*.jsonl
 test/compaction/mock-*.out
 test/compaction/answer-*.out
 test/compaction/sessions-*/
+test/compaction/requests-*-folds.jsonl

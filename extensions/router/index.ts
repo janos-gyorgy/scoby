@@ -40,6 +40,10 @@ export interface RouterHandle {
 	/** the target the session is routed to right now */
 	current(): Target | undefined;
 	role(): string;
+	/** best healthy target for another role (e.g. "compactor") — does not touch the session model */
+	targetFor(role: string): Target | undefined;
+	/** report a failure on a target used outside the session (e.g. a fold call) */
+	markFailed(raw: string, errorMessage: string): void;
 }
 
 /** Standalone use: `pi -e extensions/router/index.ts`. The scoby entry composes it with compaction. */
@@ -213,5 +217,13 @@ export function setupRouter(pi: ExtensionAPI, cfg: RouterConfig, configPath: str
 		},
 	});
 
-	return { current: () => current, role: () => role };
+	return {
+		current: () => current,
+		role: () => role,
+		targetFor: (r: string) => (cfg.roles[r] ? router.pick(r, Date.now()) : undefined),
+		markFailed: (raw: string, errorMessage: string) => {
+			const verdict = classifyError(errorMessage);
+			if (verdict.failover) router.markFailed(raw, verdict.kind, Date.now());
+		},
+	};
 }

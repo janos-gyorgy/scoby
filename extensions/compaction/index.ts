@@ -12,6 +12,7 @@ import { Type } from "typebox";
 import type { RouterConfig } from "../router/core.ts";
 import type { RouterHandle } from "../router/index.ts";
 import { shape, type FoldBlock, type Msg, type ShapeReport } from "./shaper.ts";
+import { foldPrompt, selectFold, serializeRun, summaryBudget } from "./fold.ts";
 
 const BUDGET_ENTRY = "scoby-budget";
 const FOLD_ENTRY = "scoby-fold";
@@ -31,6 +32,8 @@ export function setupCompaction(pi: ExtensionAPI, cfg: RouterConfig, router: Rou
 	let last: { report: ShapeReport; budget: number; shapedChars: number; payloadChars?: number; provider: string } | undefined;
 	let folds: FoldBlock[] = [];
 	let foldsSeen = -1;
+	let lastInput: Msg[] | undefined; // unshaped context of the latest request — what a fold looks at
+	let folding = false;
 
 	const providerOf = (ctx: ExtensionContext) => ctx.model?.provider ?? "unknown";
 	const charsPerToken = (provider: string) => cpt.get(provider) ?? DEFAULT_CPT;
@@ -58,6 +61,7 @@ export function setupCompaction(pi: ExtensionAPI, cfg: RouterConfig, router: Rou
 		const provider = providerOf(ctx);
 		const b = budget(ctx);
 		const messages = event.messages as unknown as Msg[];
+		lastInput = messages;
 		const { messages: shaped, report } = shape(messages, {
 			available: Math.max(500, b - fixedTokens),
 			charsPerToken: charsPerToken(provider),
@@ -103,6 +107,56 @@ export function setupCompaction(pi: ExtensionAPI, cfg: RouterConfig, router: Rou
 			charsPerToken: charsPerToken(last.provider),
 			stopReason: m.stopReason,
 		});
+	});
+
+	// Fold between turns (the paper: compress between task steps, not mid-step), only when
+	// enough old content sits outside the recent zone. One block per fold, never re-folded.
+	pi.on("turn_end", async (_event, ctx) => {
+		if (folding || !lastInput || cfg.compaction?.fold === false) return;
+		// only under pressure: if the last request fit the budget, a fold would change nothing the
+		// model sees (the shaper leaves under-budget requests alone) and would just spend quota
+		if (!last || last.report.before <= last.report.available) return;
+		const provider = providerOf(ctx);
+		const available = Math.max(500, budget(ctx) - fixedTokens);
+		const candidate = selectFold(lastInput, {
+			available,
+			charsPerToken: charsPerToken(provider),
+			recentShare: cfg.compaction?.recentShare ?? 0.5,
+			gateShare: cfg.compaction?.foldGateShare ?? 0.25,
+			folds: loadFolds(ctx),
+		});
+		if (!candidate) return;
+
+		// the compactor role if configured, else the planner's model, else the session model
+		const target = router?.targetFor("compactor") ?? router?.targetFor("planner") ?? router?.current();
+		const model: any = target ? ctx.modelRegistry.find(target.provider, target.modelId) : ctx.model;
+		if (!model) return;
+		folding = true;
+		const started = Date.now();
+		const maxSummary = summaryBudget(available);
+		try {
+			const response: any = await (ctx.modelRegistry as any).complete(
+				model,
+				{ messages: [{ role: "user", content: [{ type: "text", text: foldPrompt(serializeRun(candidate.msgs), maxSummary) }], timestamp: Date.now() }] },
+				{ maxTokens: Math.max(2048, maxSummary * 3), signal: ctx.signal },
+			);
+			const summary = (response.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n").trim();
+			if (response.stopReason === "error" || !summary) throw new Error(response.errorMessage ?? "empty summary");
+			const block: FoldBlock = { id: `fold-${started}`, summary, covers: candidate.covers };
+			pi.appendEntry(FOLD_ENTRY, block);
+			pi.appendEntry(BUDGET_ENTRY, {
+				event: "fold", model: `${model.provider}/${model.id}`, units: candidate.msgs.length,
+				tokensIn: candidate.tokens, summaryChars: summary.length, usage: response.usage, ms: Date.now() - started,
+			});
+			foldsSeen = -1; // reload folds on the next request
+		} catch (e) {
+			const message = e instanceof Error ? e.message : String(e);
+			if (target) router?.markFailed(target.raw, message);
+			pi.appendEntry(BUDGET_ENTRY, { event: "fold_failed", model: `${model.provider}/${model.id}`, error: message.slice(0, 300) });
+			// no fold is fine: the shaper still stubs and drops to stay in budget
+		} finally {
+			folding = false;
+		}
 	});
 
 	pi.on("session_before_compact", async (event: any) => {

@@ -40,6 +40,10 @@ export interface RouterConfig {
 		recentShare?: number;
 		/** false = leave pi's own compaction alone (default: scoby cancels threshold compaction) */
 		cancelNativeCompaction?: boolean;
+		/** false = never fold (stubs/drops only) */
+		fold?: boolean;
+		/** fold when old unfolded content reaches this share of the per-request budget (default 0.25) */
+		foldGateShare?: number;
 	};
 	failover?: {
 		/** seconds a target sits out after a rate limit / overload (default 60) */
