@@ -4,3 +4,7 @@ test/failover/mock.out
 test/failover/run.out
 test/router/mock.out
 test/router/answer.out
+test/compaction/requests-*.jsonl
+test/compaction/mock-*.out
+test/compaction/answer-*.out
+test/compaction/sessions-*/

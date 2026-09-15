@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --experimental-strip-types --no-warnings --test extensions/router/core.test.ts extensions/compaction/shaper.test.ts",
     "test:router": "test/router/run.sh",
-    "test:failover": "test/failover/run.sh"
+    "test:failover": "test/failover/run.sh",
+    "test:compaction": "test/compaction/run.sh"
   },
   "author": "",
   "license": "ISC",
@@ -18,7 +19,7 @@
   },
   "pi": {
     "extensions": [
-      "./extensions/router/index.ts"
+      "./extensions/scoby/index.ts"
     ]
   }
 }

@@ -15,7 +15,7 @@ import { classifyError, Router, validateConfig, type RouterConfig, type Target }
 
 const ENTRY = "scoby-router";
 
-function findConfig(): string | undefined {
+export function findConfig(): string | undefined {
 	const candidates = [
 		process.env.SCOBY_CONFIG,
 		path.join(process.cwd(), ".scoby.json"),
@@ -24,18 +24,30 @@ function findConfig(): string | undefined {
 	return candidates.find((p) => fs.existsSync(p));
 }
 
-export default function scobyRouter(pi: ExtensionAPI) {
+export function loadConfig(): { cfg: RouterConfig; configPath: string } | undefined {
 	const configPath = findConfig();
-	if (!configPath) {
-		// no config = no router; pi works as usual
-		return;
-	}
+	if (!configPath) return undefined; // no config = no scoby; pi works as usual
 	const cfg = JSON.parse(fs.readFileSync(configPath, "utf8")) as RouterConfig;
 	const problems = validateConfig(cfg);
 	if (problems.length) {
 		throw new Error(`scoby: invalid config ${configPath}:\n  - ${problems.join("\n  - ")}`);
 	}
+	return { cfg, configPath };
+}
 
+export interface RouterHandle {
+	/** the target the session is routed to right now */
+	current(): Target | undefined;
+	role(): string;
+}
+
+/** Standalone use: `pi -e extensions/router/index.ts`. The scoby entry composes it with compaction. */
+export default function scobyRouter(pi: ExtensionAPI) {
+	const loaded = loadConfig();
+	if (loaded) setupRouter(pi, loaded.cfg, loaded.configPath);
+}
+
+export function setupRouter(pi: ExtensionAPI, cfg: RouterConfig, configPath: string): RouterHandle {
 	// Custom connections become pi providers, registered under the connection's name.
 	for (const [name, c] of Object.entries(cfg.connections)) {
 		if (!c.baseUrl) continue;
@@ -169,4 +181,6 @@ export default function scobyRouter(pi: ExtensionAPI) {
 			ctx.ui.notify(`role ${role}\n${lines.join("\n")}`, "info");
 		},
 	});
+
+	return { current: () => current, role: () => role };
 }

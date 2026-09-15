@@ -25,12 +25,22 @@ export interface ConnectionConfig {
 	api?: string;
 	apiKeyEnv?: string;
 	models?: ModelConfig[];
+	/** compaction: max input tokens per request on this connection */
+	maxRequestTokens?: number;
 }
 
 export interface RouterConfig {
 	connections: Record<string, ConnectionConfig>;
 	roles: Record<string, string[]>;
 	defaultRole?: string;
+	compaction?: {
+		/** input-token budget per request when the connection sets none (default: half the model's context window) */
+		defaultBudget?: number;
+		/** share of the budget kept verbatim as the recent zone (default 0.5) */
+		recentShare?: number;
+		/** false = leave pi's own compaction alone (default: scoby cancels threshold compaction) */
+		cancelNativeCompaction?: boolean;
+	};
 	failover?: {
 		/** seconds a target sits out after a rate limit / overload (default 60) */
 		cooldownSeconds?: number;
