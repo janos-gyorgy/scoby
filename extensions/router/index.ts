@@ -132,6 +132,13 @@ export function setupRouter(pi: ExtensionAPI, cfg: RouterConfig, configPath: str
 		await select(ctx, "session start");
 	});
 
+	// Return to the preferred target between turns once its cooldown is over.
+	pi.on("turn_start", async (_event, ctx) => {
+		if (!current) return;
+		const preferred = router.recoverTo(role, current.raw, Date.now());
+		if (preferred) await select(ctx, `recovered: ${preferred.raw} is out of cooldown`);
+	});
+
 	pi.on("message_end", async (event: any, ctx) => {
 		const m = event.message;
 		if (!m || m.role !== "assistant") return;

@@ -72,6 +72,15 @@ test("Router walks the chain, cools failed targets, and recovers", () => {
 	assert.equal(r.pick("builder", t0 + 61_000, ["gemini/gemini-3.8-flash:low"]).raw, "groq/openai/gpt-oss-120b");
 });
 
+test("recoverTo: back to the preferred target once its cooldown is over, not before", () => {
+	const r = new Router(cfg);
+	const t0 = 5_000_000;
+	r.markFailed("gemini/gemini-3.8-flash:low", "overloaded", t0);
+	assert.equal(r.recoverTo("builder", "groq/openai/gpt-oss-120b", t0 + 30_000), undefined);
+	assert.equal(r.recoverTo("builder", "groq/openai/gpt-oss-120b", t0 + 61_000)?.raw, "gemini/gemini-3.8-flash:low");
+	assert.equal(r.recoverTo("builder", "gemini/gemini-3.8-flash:low", t0 + 61_000), undefined);
+});
+
 test("thinking level never inherits: explicit, else by reasoning capability", () => {
 	const r = new Router(cfg);
 	const [gemini, groq] = r.targets("builder");

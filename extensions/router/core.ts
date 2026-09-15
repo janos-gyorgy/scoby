@@ -175,6 +175,16 @@ export class Router {
 		return until;
 	}
 
+	/**
+	 * The role's preferred target if it differs from `currentRaw` and is ready again. Found in the
+	 * first real bench run: after one "overloaded" the router moved to the fallback and stayed there
+	 * for 31 of 41 turns, because it only re-picked on failure.
+	 */
+	recoverTo(role: string, currentRaw: string | undefined, now: number): Target | undefined {
+		const preferred = this.targets(role).find((t) => this.coolingUntil(t.raw) <= now);
+		return preferred && preferred.raw !== currentRaw ? preferred : undefined;
+	}
+
 	markHealthy(raw: string): void {
 		this.cooldownUntil.delete(raw);
 	}
