@@ -9,7 +9,8 @@
     "test:compaction": "test/compaction/run.sh",
     "test:resume": "test/router/run-glitch.sh",
     "test:guard": "test/guard/run.sh",
-    "test:all": "npm test && npm run test:router && npm run test:resume && npm run test:compaction && npm run test:guard"
+    "test:all": "npm test && npm run test:router && npm run test:resume && npm run test:compaction && npm run test:guard",
+    "test:gemini-handoff": "test/router/run-gemini-handoff.sh"
   },
   "author": "",
   "license": "ISC",

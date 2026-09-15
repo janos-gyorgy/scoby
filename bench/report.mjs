@@ -58,7 +58,7 @@ const report = {
 	foldFailures: entries.filter((e) => e.type === "custom" && e.customType === "scoby-budget" && e.data.event === "fold_failed").length,
 	toolCalls: Object.fromEntries([...new Set(toolCalls)].map((t) => [t, toolCalls.filter((x) => x === t).length])),
 	router: router.filter((r) => r.event !== "select" || r.reason !== "session start").map((r) => `${r.event} ${r.target ?? ""} ${r.kind ?? r.reason ?? ""}`.trim()),
-	models: [...new Set(assistants.map((a) => a.message.model))],
+	models: Object.fromEntries([...new Set(assistants.map((a) => a.message.model))].map((m) => [m, assistants.filter((a) => a.message.model === m).length])),
 	gates: Object.fromEntries(Object.entries(gates).map(([k, g]) => [k, g.ok ? "green" : `${newErrors[k].length} new error(s)`])),
 	newErrors, diffstat, firstErrors: errors.slice(0, 3),
 };

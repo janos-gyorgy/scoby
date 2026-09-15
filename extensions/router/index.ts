@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai";
-import { classifyError, Router, validateConfig, type RouterConfig, type Target } from "./core.ts";
+import { classifyError, patchGeminiSignatures, Router, validateConfig, type RouterConfig, type Target } from "./core.ts";
 
 const ENTRY = "scoby-router";
 
@@ -130,6 +130,12 @@ export function setupRouter(pi: ExtensionAPI, cfg: RouterConfig, configPath: str
 			role = flagRole;
 		}
 		await select(ctx, "session start");
+	});
+
+	// Cross-model history into Gemini: sign the unsigned tool calls on the wire (see core.ts).
+	pi.on("before_provider_request", (event) => {
+		const patched = patchGeminiSignatures(event.payload);
+		if (patched) record("gemini_signatures", { target: current?.raw, patched });
 	});
 
 	// Return to the preferred target between turns once its cooldown is over.

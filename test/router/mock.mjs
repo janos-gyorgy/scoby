@@ -7,6 +7,7 @@ import fs from "node:fs";
 
 const port = Number(process.env.MOCK_PORT ?? 18182);
 const logPath = process.env.MOCK_LOG ?? "mock-hits.log";
+let handoffCalls = 0;
 
 http
 	.createServer((req, res) => {
@@ -26,6 +27,19 @@ http
 			if (req.url.startsWith("/busy/")) {
 				res.writeHead(503, { "content-type": "application/json" });
 				return res.end(JSON.stringify({ error: { code: 503, message: "This model is currently experiencing high demand. (mock)", status: "UNAVAILABLE" } }));
+			}
+			if (req.url.startsWith("/handoff/")) {
+				// first call: a tool call made by a non-Gemini model (no signature); after that: overloaded
+				handoffCalls++;
+				if (handoffCalls === 1) {
+					res.writeHead(200, { "content-type": "text/event-stream" });
+					const base = { id: "h", object: "chat.completion.chunk", created: 0, model };
+					res.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: { role: "assistant", tool_calls: [{ index: 0, id: "call_h1", type: "function", function: { name: "read", arguments: JSON.stringify({ path: "package.json" }) } }] } }] })}\n\n`);
+					res.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], usage: { prompt_tokens: 900, completion_tokens: 10, total_tokens: 910 } })}\n\n`);
+					return res.end("data: [DONE]\n\n");
+				}
+				res.writeHead(503, { "content-type": "application/json" });
+				return res.end(JSON.stringify({ error: { code: 503, message: "Service temporarily overloaded (mock)" } }));
 			}
 			if (req.url.startsWith("/glitch/")) {
 				// 200 + an error object in the stream: how NIM surfaced "list index out of range" mid-run

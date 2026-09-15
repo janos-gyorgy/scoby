@@ -145,6 +145,29 @@ export function classifyError(message: string): Classified {
 	return { kind: "provider_error", status, failover: true };
 }
 
+/**
+ * Gemini 3 rejects any functionCall in the history that has no thoughtSignature (400 "Function call
+ * is missing a thought_signature"). pi only replays a signature when the message came from the same
+ * provider AND model, so after a failover every earlier tool call — made by Nemotron, or by another
+ * Gemini version — goes out unsigned. Google's placeholder is accepted instead (verified live against
+ * gemini-3.5-flash: no signature -> 400, placeholder -> OK). Real signatures are left untouched.
+ * Returns how many parts were patched; mutates the payload in place.
+ */
+export const GEMINI_PLACEHOLDER_SIGNATURE = "skip_thought_signature_validator";
+export function patchGeminiSignatures(payload: any): number {
+	let patched = 0;
+	for (const content of Array.isArray(payload?.contents) ? payload.contents : []) {
+		if (content?.role !== "model" || !Array.isArray(content.parts)) continue;
+		for (const part of content.parts) {
+			if (part?.functionCall && !part.thoughtSignature) {
+				part.thoughtSignature = GEMINI_PLACEHOLDER_SIGNATURE;
+				patched++;
+			}
+		}
+	}
+	return patched;
+}
+
 export class Router {
 	private cooldownUntil = new Map<string, number>();
 	private readonly cfg: RouterConfig;

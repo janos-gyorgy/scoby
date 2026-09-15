@@ -38,6 +38,7 @@ cat > "$OUT/scoby.json" <<EOF
     "judge":     ["groq/openai/gpt-oss-120b"]
   },
   "defaultRole": "builder",
+  "failover": { "cooldownSeconds": 300 },
   "compaction": { ${COMPACTION} "recentShare": 0.5 },
   "finish": { "gates": ["npx tsc --noEmit -p tsconfig.app.json", "npx tsc --noEmit -p server/tsconfig.json", "npx vite build --outDir /tmp/claude-1000/bench-vite-$LABEL"], "maxNudges": 3 }
 }

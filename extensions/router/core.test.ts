@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyError, parseTarget, Router, validateConfig, type RouterConfig } from "./core.ts";
+import { classifyError, GEMINI_PLACEHOLDER_SIGNATURE, parseTarget, patchGeminiSignatures, Router, validateConfig, type RouterConfig } from "./core.ts";
 
 const cfg: RouterConfig = {
 	connections: {
@@ -79,6 +79,18 @@ test("recoverTo: back to the preferred target once its cooldown is over, not bef
 	assert.equal(r.recoverTo("builder", "groq/openai/gpt-oss-120b", t0 + 30_000), undefined);
 	assert.equal(r.recoverTo("builder", "groq/openai/gpt-oss-120b", t0 + 61_000)?.raw, "gemini/gemini-3.8-flash:low");
 	assert.equal(r.recoverTo("builder", "gemini/gemini-3.8-flash:low", t0 + 61_000), undefined);
+});
+
+test("patchGeminiSignatures: unsigned foreign tool calls get the placeholder, real signatures stay", () => {
+	const payload = { contents: [
+		{ role: "user", parts: [{ text: "task" }] },
+		{ role: "model", parts: [{ functionCall: { name: "read", args: {} } }, { functionCall: { name: "bash", args: {} }, thoughtSignature: "REAL" }] },
+		{ role: "user", parts: [{ functionResponse: { name: "read", response: {} } }] },
+	] };
+	assert.equal(patchGeminiSignatures(payload), 1);
+	assert.equal(payload.contents[1].parts[0].thoughtSignature, GEMINI_PLACEHOLDER_SIGNATURE);
+	assert.equal(payload.contents[1].parts[1].thoughtSignature, "REAL");
+	assert.equal(patchGeminiSignatures({ messages: [] }), 0); // OpenAI-shaped payloads are ignored
 });
 
 test("thinking level never inherits: explicit, else by reasoning capability", () => {
