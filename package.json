@@ -1,0 +1,17 @@
+{
+  "name": "scoby",
+  "version": "1.0.0",
+  "description": "A free Kimchi: pi extensions for role routing across free-tier APIs, with budget-first compaction",
+  "scripts": {
+    "test:failover": "test/failover/run.sh"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.85.1"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}
