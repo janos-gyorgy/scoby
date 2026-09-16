@@ -27,6 +27,8 @@ Reply with ONLY a JSON object:
 - Follow the repo's existing stack and conventions (shown below). Do not introduce a different storage
   mechanism, framework or pattern when the repo already has one.`;
 
+const JSON_ONLY = "IMPORTANT: your previous reply was not a JSON object. Output ONLY the JSON object — no reasoning, no prose, no code fence.";
+
 const JUDGE_PROMPT = `You are an independent judge. You did not write this code.
 Grade the phase against the goal and the phase's steps, from the diff.
 Reply with ONLY JSON: {"grade":"A|B|C|D|F","rationale":"2-3 sentences","fix":"concrete changes needed if D or F, else empty"}
@@ -58,7 +60,7 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 	 * retry at all: ferment-32k-r6's planner got one "Service temporarily overloaded" and ferment
 	 * switched itself off. Now: every target in the role's chain, a few attempts each, backoff between.
 	 */
-	async function ask(ctx: ExtensionContext, role: string, prompt: string, maxTokens: number): Promise<string> {
+	async function ask(ctx: ExtensionContext, role: string, prompt: string, maxTokens: number, validate?: (text: string) => void): Promise<string> {
 		const chain = router?.chainFor(role).length ? router.chainFor(role) : router?.current() ? [router.current()!] : [];
 		const errors: string[] = [];
 		for (let round = 0; round < 3; round++) {
@@ -74,6 +76,15 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 					if (res.stopReason === "error") throw new Error(res.errorMessage ?? "model error");
 					const text = (res.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
 					if (!text.trim()) throw new Error("empty reply");
+					try {
+						validate?.(text);
+					} catch (bad) {
+						// r7: a reasoning model answered the planner in prose — a bad reply, not a bad provider.
+						// Re-ask (on this and the other targets) with an explicit reminder; no cooldown.
+						errors.push(`${target.raw}: unusable reply (${(bad as Error).message.slice(0, 80)})`);
+						prompt = prompt.includes(JSON_ONLY) ? prompt : `${prompt}\n\n${JSON_ONLY}`;
+						continue;
+					}
 					return text;
 				} catch (e) {
 					const message = e instanceof Error ? e.message : String(e);
@@ -120,13 +131,17 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 			// repo context first, the goal LAST: with the goal on top and ~8K chars of repo after it,
 			// the r5 planner lost the task and planned an unrelated "notes" feature
 			const prompt = (extra = "") => `${PLANNER_PROMPT}\n\n${repoContext(ctx)}\n\n## THE GOAL (plan for exactly this)\n${goal}${extra}`;
-			let plan = parseJSON<PlanInput & { goal?: string }>(await ask(ctx, "planner", prompt(), 4096));
+			const isPlan = (t: string) => {
+				const p = parseJSON<PlanInput>(t);
+				if (!Array.isArray(p.phases) || !p.phases.length) throw new Error("no phases");
+			};
+			let plan = parseJSON<PlanInput & { goal?: string }>(await ask(ctx, "planner", prompt(), 8192, isPlan));
 			let check = planMatchesGoal(goal, plan);
 			if (!check.ok) {
 				pi.appendEntry(ENTRY + "-meta", { event: "plan_off_goal", restated: plan.goal, shared: check.shared });
 				plan = parseJSON<PlanInput & { goal?: string }>(await ask(ctx, "planner", prompt(
 					`\n\nYour previous plan restated the goal as "${plan.goal ?? "?"}" — that is not the goal above. Plan again, for the goal above.`,
-				), 4096));
+				), 8192, isPlan));
 				check = planMatchesGoal(goal, plan);
 			}
 			if (!check.ok) {
@@ -212,7 +227,8 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 					const steps = phase.steps.map((s) => `- ${s.id} ${s.title}: ${s.summary ?? ""}`).join("\n");
 					try {
 						const verdict = parseJSON<{ grade: string; rationale?: string; fix?: string }>(
-							await ask(ctx, "judge", `${JUDGE_PROMPT}\n\n## Goal\n${state!.goal}\n\n## Phase ${phase.id} — ${phase.title}\n${steps}\n\n## diff\n${diff.slice(0, 120000)}`, 2048),
+							await ask(ctx, "judge", `${JUDGE_PROMPT}\n\n## Goal\n${state!.goal}\n\n## Phase ${phase.id} — ${phase.title}\n${steps}\n\n## diff\n${diff.slice(0, 120000)}`, 4096,
+								(t) => { if (!/^[ABCDF]$/i.test(String(parseJSON<{ grade: string }>(t).grade ?? "").trim())) throw new Error("no grade"); }),
 						);
 						record({ type: "phase_graded", phaseId: a.phaseId, grade: verdict.grade, rationale: verdict.rationale, fix: verdict.fix });
 					} catch (e) {

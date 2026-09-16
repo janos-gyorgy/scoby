@@ -26,6 +26,12 @@ http.createServer((req, res) => {
       res.writeHead(503, { "content-type": "application/json" });
       return res.end(JSON.stringify({ error: { code: 503, message: "Service temporarily overloaded (mock)" } }));
     }
+    if (req.url.startsWith("/plan-chatty/")) {
+      const reminded = body.includes("Output ONLY the JSON object");
+      fs.appendFileSync(log, JSON.stringify({ kind: "plan-chatty", reminded }) + "\n");
+      if (!reminded) return sse(res, payload.model, "We are given a goal: track starter. Let me think about the phases step by step...");
+      req.url = "/plan/v1/chat/completions"; // fall through to the good planner's answer
+    }
     if (req.url.startsWith("/plan/")) {
       // both real ferment runs planned with an EMPTY goal and this mock never noticed — now it checks
       fs.appendFileSync(log, JSON.stringify({ kind: "plan", sawGoal: body.includes("warn me before it runs out") }) + "\n");
