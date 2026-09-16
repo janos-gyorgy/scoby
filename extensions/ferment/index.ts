@@ -22,7 +22,9 @@ Reply with ONLY a JSON object:
 {"criteria":["..."],"assumptions":["..."],"phases":[{"title":"...","steps":[{"title":"...","detail":"what to change, which files, how to verify"}]}]}
 - 2-4 phases, 2-5 steps each; each step must be doable in one focused session.
 - Model the whole data flow the goal implies, including second-order effects (what consumes and what produces the same resource).
-- Nobody can answer questions: state assumptions explicitly instead of asking.`;
+- Nobody can answer questions: state assumptions explicitly instead of asking.
+- Follow the repo's existing stack and conventions (shown below). Do not introduce a different storage
+  mechanism, framework or pattern when the repo already has one.`;
 
 const JUDGE_PROMPT = `You are an independent judge. You did not write this code.
 Grade the phase against the goal and the phase's steps, from the diff.
@@ -86,7 +88,7 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 		const goal = textOf((ctx.sessionManager.getEntries().find((e: any) => e.type === "message" && e.message?.role === "user") as any)?.message);
 		state = initial(goal);
 		try {
-			const plan = parseJSON<PlanInput>(await ask(ctx, "planner", `${PLANNER_PROMPT}\n\n## Goal\n${goal}`, 4096));
+			const plan = parseJSON<PlanInput>(await ask(ctx, "planner", `${PLANNER_PROMPT}\n\n## Goal\n${goal}\n\n${repoContext(ctx)}`, 4096));
 			record({ type: "planned", plan });
 			const first = next(state!);
 			if (first.kind === "activate_phase") record({ type: "phase_activated", phaseId: first.phaseId });
@@ -188,6 +190,29 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 			ctx.ui.notify(`ferment ${state.status}\n${lines.join("\n")}`, "info");
 		},
 	});
+}
+
+/**
+ * What the repo looks like, for the planner. Without this it plans against an imagined project: in
+ * ferment-32k-r4 it chose "store stock in a JSON file" for a Postgres/drizzle app.
+ */
+function repoContext(ctx: ExtensionContext): string {
+	const read = (p: string) => {
+		try {
+			return require("node:fs").readFileSync(require("node:path").join(ctx.cwd, p), "utf8") as string;
+		} catch {
+			return "";
+		}
+	};
+	const notes = (read("CLAUDE.md") || read("AGENTS.md")).slice(0, 6000);
+	const files = spawnSync("git", ["ls-files"], { cwd: ctx.cwd, encoding: "utf8", maxBuffer: 8 * 1024 * 1024 }).stdout ?? "";
+	const tracked = files.split("\n").filter((f) => f && !/^(node_modules|dist)\//.test(f)).slice(0, 400).join("\n");
+	const pkg = read("package.json").slice(0, 2000);
+	return [
+		notes ? `## Repo notes (CLAUDE.md / AGENTS.md)\n${notes}` : "",
+		pkg ? `## package.json\n${pkg}` : "",
+		`## Tracked files\n${tracked}`,
+	].filter(Boolean).join("\n\n");
 }
 
 function textOf(message: any): string {

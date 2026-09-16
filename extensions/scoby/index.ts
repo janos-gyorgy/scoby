@@ -10,8 +10,11 @@ export default function scoby(pi: ExtensionAPI) {
 	const loaded = loadConfig();
 	if (!loaded) return;
 	const router = setupRouter(pi, loaded.cfg, loaded.configPath);
+	// ferment first: it appends the step brief in a `context` hook, and compaction's hook (registered
+	// after it) must see that brief so it counts against the budget. The other way round, the brief
+	// rode on top of an already-fitted request — 8 requests went over budget in ferment-32k-r4.
+	if (loaded.cfg.ferment?.enabled) setupFerment(pi, loaded.cfg, router);
 	setupCompaction(pi, loaded.cfg, router);
 	// ferment owns the gates when it runs; the finish guard is the single-shot equivalent
-	if (loaded.cfg.ferment?.enabled) setupFerment(pi, loaded.cfg, router);
-	else setupGuard(pi, loaded.cfg);
+	if (!loaded.cfg.ferment?.enabled) setupGuard(pi, loaded.cfg);
 }
