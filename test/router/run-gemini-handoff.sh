@@ -10,6 +10,7 @@ export PI_CODING_AGENT_DIR=$(mktemp -d) PI_OFFLINE=1 PI_TELEMETRY=0 MOCK_LOG="$P
 cat > "$WORK/scoby.json" <<JSON
 { "connections": { "handoff": { "baseUrl": "http://127.0.0.1:18182/handoff/v1", "models": [{ "id": "handoff-model" }] },
                    "gemini": { "provider": "google" } },
+  "policy": { "repoContentLeavesMachine": true },
   "roles": { "builder": ["handoff/handoff-model", "gemini/gemini-3.5-flash:low"] } }
 JSON
 SESSIONS=$(mktemp -d); rm -f mock-hits.log

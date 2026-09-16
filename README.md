@@ -64,3 +64,27 @@ npm run test:failover  # the original probe that proved message_end + setModel w
 ```
 
 Needs Node >= 22.19.
+
+## Threat model (read before pointing this at anything you care about)
+
+scoby runs pi, and pi's `bash` tool runs real commands **as you**. The bench scripts set a temporary
+`HOME` and unset `KUBECONFIG`, which hides default credential paths — **it is not a sandbox**: the
+process is your user, so absolute paths (`/home/you/.kube/config`, `~/.ssh/*`) are still readable.
+
+What that means in practice:
+
+- **Provider keys live in the agent's environment.** Any command the model runs can read them. Treat
+  keys used with scoby as disposable and rotate them after unattended runs.
+- **Repo content leaves the machine.** Files, diffs and tool output go to whichever third-party APIs
+  you configure; free tiers may use that data to improve their products. Scoby refuses to start
+  unless the config says `{"policy":{"repoContentLeavesMachine":true}}` — that is an
+  acknowledgement, not a protection.
+- **Repo content is untrusted input.** File contents, tool output and model-written fold summaries
+  re-enter the context. Scoby labels those blocks as data and tells the model not to follow
+  instructions found inside them; prompts are a mitigation, not a guarantee.
+- **pi is pinned exactly** (`0.85.1`) because an extension runs with full Node privileges; upgrade
+  deliberately.
+
+**Real containment** — a container with only the repo mounted, no host home, keys scoped to that
+container — is not built yet. Until then, run scoby on repos you would be willing to publish, on a
+throwaway clone or worktree, and review the diff before it goes anywhere.

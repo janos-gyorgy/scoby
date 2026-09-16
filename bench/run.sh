@@ -34,6 +34,7 @@ cat > "$OUT/scoby.json" <<EOF
     "gemini": { "provider": "google" },
     "groq": { "provider": "groq" }
   },
+  "policy": { "repoContentLeavesMachine": true },
   "roles": {
     "builder":   ["nim/deepseek-ai/deepseek-v4-flash-0731", "nim/nvidia/nemotron-3-super-120b-a12b", "nim/openai/gpt-oss-20b"],
     "planner":   ["nim/nvidia/nemotron-3-super-120b-a12b"],

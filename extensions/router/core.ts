@@ -45,6 +45,11 @@ export interface RouterConfig {
 		/** fold when old unfolded content reaches this share of the per-request budget (default 0.25) */
 		foldGateShare?: number;
 	};
+	/** Safety policy. Repo content (files, diffs, tool output) is sent to third-party inference APIs. */
+	policy?: {
+		/** must be true to run: an explicit acknowledgement that this repo may leave the machine */
+		repoContentLeavesMachine?: boolean;
+	};
 	ferment?: {
 		/** run the goal as planned phases of steps, with gates and a judge between phases */
 		enabled?: boolean;
@@ -118,6 +123,11 @@ export function validateConfig(cfg: RouterConfig): string[] {
 		}
 	}
 	if (cfg.defaultRole && !cfg.roles?.[cfg.defaultRole]) errors.push(`defaultRole "${cfg.defaultRole}" is not a role`);
+	if (cfg.policy?.repoContentLeavesMachine !== true) {
+		errors.push(
+			`policy.repoContentLeavesMachine must be true: every run sends this repo's files, diffs and tool output to the configured third-party APIs (free tiers may train on them). Add {"policy":{"repoContentLeavesMachine":true}} to acknowledge.`,
+		);
+	}
 	return errors;
 }
 

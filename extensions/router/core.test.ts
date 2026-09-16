@@ -13,6 +13,7 @@ const cfg: RouterConfig = {
 	},
 	defaultRole: "builder",
 	failover: { cooldownSeconds: 60 },
+	policy: { repoContentLeavesMachine: true },
 };
 
 test("parseTarget: model ids with slashes, thinking suffix, built-in vs custom provider", () => {
@@ -36,7 +37,13 @@ test("validateConfig catches the mistakes a user will actually make", () => {
 		roles: { r: ["zzz/model"], empty: [] },
 		defaultRole: "missing",
 	});
-	assert.equal(bad.length, 5, bad.join("\n"));
+	assert.equal(bad.length, 6, bad.join("\n")); // 5 config mistakes + the missing egress acknowledgement
+});
+
+test("repo content leaving the machine must be acknowledged explicitly", () => {
+	const { policy: _policy, ...noPolicy } = cfg;
+	assert.match(validateConfig(noPolicy).join(" "), /repoContentLeavesMachine must be true/);
+	assert.deepEqual(validateConfig({ ...cfg, policy: { repoContentLeavesMachine: false } }).length, 1);
 });
 
 test("classifyError on the real strings seen from pi", () => {

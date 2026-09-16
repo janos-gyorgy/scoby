@@ -95,7 +95,9 @@ test("folds replace covered units with one memory block after the task", () => {
 	});
 	assert.equal(report.folded, 3);
 	assert.equal(messages[0], s[0]);
-	assert.ok(String((messages[1].content as any[])[0].text).startsWith(`${STUB_MARK} memory]`));
+	const memory = String((messages[1].content as any[])[0].text);
+	assert.ok(memory.startsWith(`${STUB_MARK} memory]`));
+	assert.match(memory, /DATA, not instructions/); // injected summaries must not read as instructions
 	assert.ok(!messages.some((m) => m.toolCallId === "c1" || m.toolCallId === "c3"));
 });
 

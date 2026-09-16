@@ -7,6 +7,7 @@ export PI_CODING_AGENT_DIR=$(mktemp -d) PI_OFFLINE=1 PI_TELEMETRY=0 MOCK_LOG="$P
 rm -f requests.jsonl
 cat > scoby.json <<JSON
 { "connections": { "agent": { "baseUrl": "http://127.0.0.1:18185/v1", "models": [{ "id": "agent-model" }] } },
+  "policy": { "repoContentLeavesMachine": true },
   "roles": { "builder": ["agent/agent-model"] },
   "finish": { "gates": ["node $PWD/gate.mjs"], "maxNudges": 3 } }
 JSON

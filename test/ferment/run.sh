@@ -12,6 +12,7 @@ cat > "$WORK/scoby.json" <<JSON
     "agent": { "baseUrl": "http://127.0.0.1:18186/agent/v1", "models": [{ "id": "agent-model" }] },
     "planner": { "baseUrl": "http://127.0.0.1:18186/plan/v1", "models": [{ "id": "planner-model" }] },
     "judge": { "baseUrl": "http://127.0.0.1:18186/judge/v1", "models": [{ "id": "judge-model" }] } },
+  "policy": { "repoContentLeavesMachine": true },
   "roles": { "builder": ["agent/agent-model"], "planner": ["planner/planner-model"], "judge": ["judge/judge-model"] },
   "ferment": { "enabled": true, "gates": ["true"] } }
 JSON

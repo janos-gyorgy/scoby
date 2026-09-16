@@ -17,6 +17,7 @@ cat > "$WORK/scoby-fold-$FOLD.json" <<EOF
     "agent": { "baseUrl": "http://127.0.0.1:18184/v1", "models": [{ "id": "agent-model", "contextWindow": 128000, "maxTokens": 1024 }] },
     "summarizer": { "baseUrl": "http://127.0.0.1:18184/summarize/v1", "models": [{ "id": "summarizer-model", "contextWindow": 128000, "maxTokens": 4096 }] }
   },
+  "policy": { "repoContentLeavesMachine": true },
   "roles": { "builder": ["agent/agent-model"], "compactor": ["summarizer/summarizer-model"] },
   "compaction": { "defaultBudget": $BUDGET, "fold": $FOLD }
 }

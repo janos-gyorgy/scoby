@@ -4,6 +4,7 @@
     "busy":        { "baseUrl": "http://127.0.0.1:18182/busy/v1",        "models": [{ "id": "busy-model" }] },
     "good":        { "baseUrl": "http://127.0.0.1:18182/good/v1",        "models": [{ "id": "good-model" }] }
   },
+  "policy": { "repoContentLeavesMachine": true },
   "roles": {
     "builder": ["ratelimited/rl-model", "busy/busy-model", "good/good-model"]
   },
