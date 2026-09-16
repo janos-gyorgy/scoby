@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { apply, initial, MAX_STEP_STARTS, next, planMatchesGoal, stepBrief, type Event, type State } from "./core.ts";
+import { apply, assertPlanShape, initial, MAX_STEP_STARTS, next, planMatchesGoal, stepBrief, type Event, type State } from "./core.ts";
 
 const plan = {
 	criteria: ["stock is tracked"],
@@ -144,4 +144,14 @@ more when stock runs low, and notifies me in time.`;
 	};
 	assert.equal(planMatchesGoal(goal, wrong).ok, false, JSON.stringify(planMatchesGoal(goal, wrong).shared));
 	assert.equal(planMatchesGoal(goal, right).ok, true, JSON.stringify(planMatchesGoal(goal, right).shared));
+});
+
+test("assertPlanShape: a phase without steps (ferment-32k-r8) is a readable rejection, not a TypeError", () => {
+	const r8like = { phases: [{ title: "Backend", tasks: ["add column"] }] };
+	assert.throws(() => assertPlanShape(r8like), /has no steps array/);
+	assert.throws(() => assertPlanShape({ phases: [] }), /no phases/);
+	assert.throws(() => assertPlanShape({ phases: [{ title: "x", steps: [{ detail: "no title" }] }] }), /step 1 has no title/);
+	assert.doesNotThrow(() => assertPlanShape({ phases: [{ title: "x", steps: [{ title: "y" }] }] }));
+	// and the goal check never crashes on a malformed plan
+	assert.doesNotThrow(() => planMatchesGoal("track starter stock", r8like as any));
 });

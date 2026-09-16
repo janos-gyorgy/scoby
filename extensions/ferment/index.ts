@@ -13,7 +13,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { RouterConfig } from "../router/core.ts";
 import type { RouterHandle } from "../router/index.ts";
 import { errorLines, newErrors, type GateRun } from "../guard/gates.ts";
-import { apply, initial, next, planMatchesGoal, stepBrief, type Event, type PlanInput, type State } from "./core.ts";
+import { apply, assertPlanShape, initial, next, planMatchesGoal, stepBrief, type Event, type PlanInput, type State } from "./core.ts";
 
 const ENTRY = "scoby-ferment";
 
@@ -127,13 +127,14 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 			return;
 		}
 		state = initial(goal);
+		let lastReply = ""; // outside the try: the catch below records it
 		try {
 			// repo context first, the goal LAST: with the goal on top and ~8K chars of repo after it,
 			// the r5 planner lost the task and planned an unrelated "notes" feature
 			const prompt = (extra = "") => `${PLANNER_PROMPT}\n\n${repoContext(ctx)}\n\n## THE GOAL (plan for exactly this)\n${goal}${extra}`;
 			const isPlan = (t: string) => {
-				const p = parseJSON<PlanInput>(t);
-				if (!Array.isArray(p.phases) || !p.phases.length) throw new Error("no phases");
+				lastReply = t;
+				assertPlanShape(parseJSON(t)); // shape errors are re-asked like prose (r8: a phase without steps)
 			};
 			let plan = parseJSON<PlanInput & { goal?: string }>(await ask(ctx, "planner", prompt(), 8192, isPlan));
 			let check = planMatchesGoal(goal, plan);
@@ -158,7 +159,7 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 		} catch (e) {
 			// planning failed: STOP. Silently degrading to a plain agent loop (what r6 did) produces a run
 			// that looks valid and isn't what was asked for.
-			pi.appendEntry(ENTRY + "-meta", { event: "plan_failed", error: String(e).slice(0, 300) });
+			pi.appendEntry(ENTRY + "-meta", { event: "plan_failed", error: String(e).slice(0, 300), stack: e instanceof Error ? e.stack?.split("\n").slice(0, 3).join(" | ") : undefined, reply: lastReply.slice(0, 600) });
 			state = apply(state!, { type: "failed", reason: `planning failed: ${String(e).slice(0, 200)}` });
 			pi.appendEntry(ENTRY, { type: "failed", reason: "planning failed" } as any);
 			// ctx.abort() is a no-op before the loop starts, and shutdown() is a no-op in print mode;

@@ -196,9 +196,21 @@ export function keywords(text: string): Set<string> {
  * checkpoint catches this; without one, a deterministic floor: the plan must reuse enough of the
  * goal's own words. Cheap, crude, and it rejects exactly that failure.
  */
+/** Throws with a readable reason unless `plan` has the shape the engine needs. r8's planner sent a phase without steps. */
+export function assertPlanShape(plan: any): asserts plan is PlanInput {
+	if (!plan || !Array.isArray(plan.phases) || plan.phases.length === 0) throw new Error("plan has no phases array");
+	plan.phases.forEach((p: any, i: number) => {
+		if (typeof p?.title !== "string" || !p.title.trim()) throw new Error(`phase ${i + 1} has no title`);
+		if (!Array.isArray(p.steps) || p.steps.length === 0) throw new Error(`phase "${p.title}" has no steps array`);
+		p.steps.forEach((s: any, j: number) => {
+			if (typeof s?.title !== "string" || !s.title.trim()) throw new Error(`phase "${p.title}" step ${j + 1} has no title`);
+		});
+	});
+}
+
 export function planMatchesGoal(goalFeature: string, plan: PlanInput & { goal?: string }, minShared = 3): { ok: boolean; shared: string[] } {
 	const goal = keywords(goalFeature);
-	const planText = [plan.goal ?? "", ...(plan.criteria ?? []), ...plan.phases.flatMap((p) => [p.title, ...p.steps.map((s) => `${s.title} ${s.detail ?? ""}`)])].join(" ");
+	const planText = [plan.goal ?? "", ...(plan.criteria ?? []), ...(plan.phases ?? []).flatMap((p) => [p?.title ?? "", ...(p?.steps ?? []).map((s) => `${s?.title ?? ""} ${s?.detail ?? ""}`)])].join(" ");
 	const shared = [...keywords(planText)].filter((w) => goal.has(w));
 	return { ok: shared.length >= minShared, shared };
 }

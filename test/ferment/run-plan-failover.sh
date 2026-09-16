@@ -17,6 +17,7 @@ scenario() { # $1 label, $2 planner chain json
     "busy": { "baseUrl": "http://127.0.0.1:18186/plan-busy/v1", "models": [{ "id": "busy-model" }] },
     "planner": { "baseUrl": "http://127.0.0.1:18186/plan/v1", "models": [{ "id": "planner-model" }] },
     "chatty": { "baseUrl": "http://127.0.0.1:18186/plan-chatty/v1", "models": [{ "id": "chatty-model" }] },
+    "shapeless": { "baseUrl": "http://127.0.0.1:18186/plan-shapeless/v1", "models": [{ "id": "shapeless-model" }] },
     "judge": { "baseUrl": "http://127.0.0.1:18186/judge/v1", "models": [{ "id": "judge-model" }] } },
   "policy": { "repoContentLeavesMachine": true },
   "roles": { "builder": ["agent/agent-model"], "planner": $chain, "judge": ["judge/judge-model"] },
@@ -38,15 +39,18 @@ kill $MOCK; sleep 0.2 2>/dev/null || true; : > mock.out; MOCK_LOG="$HERE/request
 scenario B '["busy/busy-model"]'
 kill $MOCK; : > mock.out; MOCK_LOG="$HERE/requests-C.jsonl" node mock.mjs > mock.out 2>&1 & MOCK=$!; until grep -q listening mock.out 2>/dev/null; do :; done
 scenario C '["chatty/chatty-model"]'
+kill $MOCK; : > mock.out; MOCK_LOG="$HERE/requests-D.jsonl" node mock.mjs > mock.out 2>&1 & MOCK=$!; until grep -q listening mock.out 2>/dev/null; do :; done
+scenario D '["shapeless/shapeless-model"]'
 node - <<'NODE'
 const fs = require("fs");
 const read = (l) => fs.readFileSync(`requests-${l}.jsonl`, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
-const A = read("A"), B = read("B"), C = read("C");
+const A = read("A"), B = read("B"), C = read("C"), D = read("D");
 const checks = {
   "A: busy planner tried, then the good one planned": A.some((r) => r.kind === "plan-busy") && A.some((r) => r.kind === "plan" && r.sawGoal),
   "A: the run went on to do steps": A.filter((r) => r.kind === "agent").length >= 2,
   "B: planner retried before giving up": B.filter((r) => r.kind === "plan-busy").length >= 3,
   "B: no agent turn at all (no silent fallback)": !B.some((r) => r.kind === "agent"),
+  "D: a plan with a step-less phase (r8) is re-asked, then the run proceeds": D.some((r) => r.kind === "plan-shapeless" && r.reminded) && D.filter((r) => r.kind === "agent").length >= 2,
   "C: a prose reply is re-asked with a JSON-only reminder, then the run proceeds": C.some((r) => r.kind === "plan-chatty" && !r.reminded) && C.some((r) => r.kind === "plan-chatty" && r.reminded) && C.filter((r) => r.kind === "agent").length >= 2,
 };
 for (const [k, v] of Object.entries(checks)) console.log(`${v ? "ok  " : "FAIL"} ${k}`);
