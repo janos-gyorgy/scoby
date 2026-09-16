@@ -50,6 +50,8 @@ export interface RouterConfig {
 		gates?: string[];
 		/** follow-ups with gate errors before giving up (default 3) */
 		maxNudges?: number;
+		/** a run that changed no files is not done either (default false) */
+		requireChanges?: boolean;
 	};
 	failover?: {
 		/** seconds a target sits out after a rate limit / overload (default 60) */

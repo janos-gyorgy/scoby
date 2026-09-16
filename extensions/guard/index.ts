@@ -33,18 +33,27 @@ export function setupGuard(pi: ExtensionAPI, cfg: RouterConfig) {
 		const lastMsg = [...(event.messages ?? [])].reverse().find((m: any) => m.role === "assistant");
 		if (!lastMsg || lastMsg.stopReason !== "stop") return; // errors are the router's business
 		const fresh = newErrors(baseline, runGates(ctx.cwd));
-		pi.appendEntry(ENTRY, { event: "check", newErrors: fresh.reduce((n, g) => n + g.lines.length, 0), nudges });
-		if (!fresh.length) return;
+		// r2 found this hole: green gates are also true of a run that changed nothing at all
+		let noChanges = false;
+		if (cfg.finish?.requireChanges) {
+			const status = spawnSync("git", ["status", "--porcelain"], { cwd: ctx.cwd, encoding: "utf8" });
+			noChanges = (status.stdout ?? "").trim() === "";
+		}
+		pi.appendEntry(ENTRY, { event: "check", newErrors: fresh.reduce((n, g) => n + g.lines.length, 0), noChanges, nudges });
+		if (!fresh.length && !noChanges) return;
 		if (nudges >= maxNudges) {
 			pi.appendEntry(ENTRY, { event: "gave_up", nudges });
 			return;
 		}
 		nudges++;
 		const report = fresh.map((g) => `$ ${g.cmd}\n${g.lines.slice(0, 20).join("\n")}`).join("\n\n");
+		const why = noChanges
+			? "no files were changed — the task is not done. Implement it, then finish."
+			: `the gates show new errors compared to the start of this session. Fix them, then finish.\n\n${report}`;
 		pi.sendMessage(
 			{
 				customType: "scoby-gate",
-				content: `[scoby] Not done yet: the gates show new errors compared to the start of this session. Fix them, then finish.\n\n${report}`,
+				content: `[scoby] Not done yet: ${why}`,
 				display: true,
 			},
 			{ triggerTurn: true, deliverAs: "followUp" },

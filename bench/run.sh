@@ -32,15 +32,15 @@ cat > "$OUT/scoby.json" <<EOF
     "groq": { "provider": "groq" }
   },
   "roles": {
-    "builder":   ["nim/nvidia/nemotron-3-super-120b-a12b", "gemini/gemini-3.5-flash:low", "nim/openai/gpt-oss-20b"],
-    "planner":   ["gemini/gemini-3.5-flash:low", "nim/nvidia/nemotron-3-super-120b-a12b"],
-    "compactor": ["gemini/gemini-3.5-flash:low", "nim/nvidia/nemotron-3-super-120b-a12b"],
+    "builder":   ["nim/nvidia/nemotron-3-super-120b-a12b", "nim/openai/gpt-oss-20b"],
+    "planner":   ["nim/nvidia/nemotron-3-super-120b-a12b"],
+    "compactor": ["nim/nvidia/nemotron-3-super-120b-a12b"],
     "judge":     ["groq/openai/gpt-oss-120b"]
   },
   "defaultRole": "builder",
   "failover": { "cooldownSeconds": 300 },
   "compaction": { ${COMPACTION} "recentShare": 0.5 },
-  "finish": { "gates": ["npx tsc --noEmit -p tsconfig.app.json", "npx tsc --noEmit -p server/tsconfig.json", "npx vite build --outDir /tmp/claude-1000/bench-vite-$LABEL"], "maxNudges": 3 }
+  "finish": { "requireChanges": true, "gates": ["npx tsc --noEmit -p tsconfig.app.json", "npx tsc --noEmit -p server/tsconfig.json", "npx vite build --outDir /tmp/claude-1000/bench-vite-$LABEL"], "maxNudges": 3 }
 }
 EOF
 
