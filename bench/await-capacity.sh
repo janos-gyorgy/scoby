@@ -18,7 +18,15 @@ for attempt in $(seq 1 "${MAX_ATTEMPTS:-24}"); do
 	echo "=== attempt $attempt $(date -Is)"
 	for m in $MODELS; do
 		if node "$ROOT/bench/preflight.mjs" "$m"; then
-			echo "capacity back on $m — starting sweep $SUFFIX"
+			echo "capacity back on $m"
+			if [ "${FERMENT_FIRST:-1}" = "1" ] && [ ! -f "$BENCH_DIR/ferment-32k-$SUFFIX/exit" ]; then
+				echo "ferment run first (the architecture lever vs Kimchi's B)"
+				FERMENT=1 BENCH_DIR=$BENCH_DIR RUN_TIMEOUT=${RUN_TIMEOUT:-5400} "$ROOT/bench/run.sh" "ferment-32k-$SUFFIX" 32000 > "$BENCH_DIR/ferment-32k-$SUFFIX.log" 2>&1
+				echo "ferment exit=$? $(date -Is)"
+				node "$ROOT/bench/judge.mjs" "$BENCH_DIR/ferment-32k-$SUFFIX/repo" 63fe3b6 > "$BENCH_DIR/ferment-32k-$SUFFIX/judge.json" 2> "$BENCH_DIR/ferment-32k-$SUFFIX/judge.err" || true
+				tail -2 "$BENCH_DIR/ferment-32k-$SUFFIX.log"
+			fi
+			echo "starting sweep $SUFFIX"
 			SUFFIX=$SUFFIX RUN_TIMEOUT=${RUN_TIMEOUT:-5400} BENCH_DIR=$BENCH_DIR "$ROOT/bench/sweep.sh" > "$BENCH_DIR/sweep-$SUFFIX.log" 2>&1
 			code=$?
 			echo "sweep exit=$code $(date -Is)"

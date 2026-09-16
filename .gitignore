@@ -12,3 +12,5 @@ test/compaction/requests-*-folds.jsonl
 test/guard/requests.jsonl
 test/guard/*.out
 test/guard/scoby.json
+test/ferment/requests.jsonl
+test/ferment/*.out

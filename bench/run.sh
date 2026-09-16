@@ -20,6 +20,8 @@ ln -s "$SRC/node_modules" "$OUT/repo/node_modules"
 ln -s "$SRC/server/node_modules" "$OUT/repo/server/node_modules"
 git -C "$OUT/repo" cat-file -e 1579f74 2>/dev/null && { echo "Kimchi's commit leaked into the clone"; exit 1; }
 
+FERMENT_CFG=""
+[ "${FERMENT:-0}" = "1" ] && FERMENT_CFG='"ferment": { "enabled": true },'
 COMPACTION=""
 [ "$MODE" = "native" ] && COMPACTION='"cancelNativeCompaction": false,'
 cat > "$OUT/scoby.json" <<EOF
@@ -40,6 +42,7 @@ cat > "$OUT/scoby.json" <<EOF
   },
   "defaultRole": "builder",
   "failover": { "cooldownSeconds": 300 },
+  ${FERMENT_CFG}
   "compaction": { ${COMPACTION} "recentShare": 0.5 },
   "finish": { "requireChanges": true, "gates": ["npx tsc --noEmit -p tsconfig.app.json", "npx tsc --noEmit -p server/tsconfig.json", "npx vite build --outDir /tmp/claude-1000/bench-vite-$LABEL"], "maxNudges": 3 }
 }

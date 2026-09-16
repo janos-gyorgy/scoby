@@ -45,6 +45,12 @@ export interface RouterConfig {
 		/** fold when old unfolded content reaches this share of the per-request budget (default 0.25) */
 		foldGateShare?: number;
 	};
+	ferment?: {
+		/** run the goal as planned phases of steps, with gates and a judge between phases */
+		enabled?: boolean;
+		/** gate commands for phase boundaries (defaults to finish.gates) */
+		gates?: string[];
+	};
 	finish?: {
 		/** commands (no shell) that must show no NEW errors vs. session start before a run may end */
 		gates?: string[];
