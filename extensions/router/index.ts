@@ -42,6 +42,8 @@ export interface RouterHandle {
 	role(): string;
 	/** best healthy target for another role (e.g. "compactor") — does not touch the session model */
 	targetFor(role: string): Target | undefined;
+	/** the whole chain for a role, ready targets first, then the ones cooling down (soonest first) */
+	chainFor(role: string): Target[];
 	/** report a failure on a target used outside the session (e.g. a fold call) */
 	markFailed(raw: string, errorMessage: string): void;
 }
@@ -234,6 +236,11 @@ export function setupRouter(pi: ExtensionAPI, cfg: RouterConfig, configPath: str
 		current: () => current,
 		role: () => role,
 		targetFor: (r: string) => (cfg.roles[r] ? router.pick(r, Date.now()) : undefined),
+		chainFor: (r: string) => {
+			if (!cfg.roles[r]) return [];
+			const now = Date.now();
+			return [...router.targets(r)].sort((a, b) => Math.max(0, router.coolingUntil(a.raw) - now) - Math.max(0, router.coolingUntil(b.raw) - now));
+		},
 		markFailed: (raw: string, errorMessage: string) => {
 			const verdict = classifyError(errorMessage);
 			if (verdict.failover) router.markFailed(raw, verdict.kind, Date.now());

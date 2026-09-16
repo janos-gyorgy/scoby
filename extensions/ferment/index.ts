@@ -53,17 +53,39 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 
 	const git = (cwd: string, ...args: string[]) => spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 }).stdout ?? "";
 
+	/**
+	 * One-shot call for the planner/judge roles, with the router's failover. The first version had no
+	 * retry at all: ferment-32k-r6's planner got one "Service temporarily overloaded" and ferment
+	 * switched itself off. Now: every target in the role's chain, a few attempts each, backoff between.
+	 */
 	async function ask(ctx: ExtensionContext, role: string, prompt: string, maxTokens: number): Promise<string> {
-		const target = router?.targetFor(role) ?? router?.current();
-		const model: any = target ? ctx.modelRegistry.find(target.provider, target.modelId) : ctx.model;
-		if (!model) throw new Error(`no model for role ${role}`);
-		const res: any = await (ctx.modelRegistry as any).complete(
-			model,
-			{ messages: [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }] },
-			{ maxTokens, signal: ctx.signal },
-		);
-		if (res.stopReason === "error") throw new Error(res.errorMessage ?? "model error");
-		return (res.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+		const chain = router?.chainFor(role).length ? router.chainFor(role) : router?.current() ? [router.current()!] : [];
+		const errors: string[] = [];
+		for (let round = 0; round < 3; round++) {
+			for (const target of chain) {
+				const model: any = ctx.modelRegistry.find(target.provider, target.modelId);
+				if (!model) continue;
+				try {
+					const res: any = await (ctx.modelRegistry as any).complete(
+						model,
+						{ messages: [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }] },
+						{ maxTokens, signal: ctx.signal },
+					);
+					if (res.stopReason === "error") throw new Error(res.errorMessage ?? "model error");
+					const text = (res.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+					if (!text.trim()) throw new Error("empty reply");
+					return text;
+				} catch (e) {
+					const message = e instanceof Error ? e.message : String(e);
+					errors.push(`${target.raw}: ${message.slice(0, 120)}`);
+					router?.markFailed(target.raw, message);
+				}
+			}
+			if (ctx.signal?.aborted) break;
+			const scale = Number(process.env.SCOBY_BACKOFF_SCALE ?? 1); // tests shrink the waits
+			await new Promise((r) => setTimeout(r, [10_000, 30_000, 60_000][round] * scale));
+		}
+		throw new Error(`${role} unavailable after ${errors.length} attempts: ${errors.slice(-3).join(" | ")}`);
 	}
 
 	function parseJSON<T>(text: string): T {
@@ -119,10 +141,23 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 			const step = next(state!);
 			if (step.kind === "run_step") record({ type: "step_started", phaseId: step.phaseId, stepId: step.stepId });
 		} catch (e) {
-			// planning failed: leave ferment off rather than block the run
+			// planning failed: STOP. Silently degrading to a plain agent loop (what r6 did) produces a run
+			// that looks valid and isn't what was asked for.
 			pi.appendEntry(ENTRY + "-meta", { event: "plan_failed", error: String(e).slice(0, 300) });
-			state = undefined;
+			state = apply(state!, { type: "failed", reason: `planning failed: ${String(e).slice(0, 200)}` });
+			pi.appendEntry(ENTRY, { type: "failed", reason: "planning failed" } as any);
+			// ctx.abort() is a no-op before the loop starts, and shutdown() is a no-op in print mode;
+			// agent_start aborts the loop and tool_call blocks anything that still slips through
 		}
+	});
+
+	// A failed ferment must not degrade into a plain agent run.
+	const failedEarly = () => state?.status === "failed" && state.phases.length === 0;
+	pi.on("agent_start", async (_event, ctx) => {
+		if (failedEarly()) ctx.abort();
+	});
+	pi.on("tool_call", async () => {
+		if (state?.status === "failed") return { block: true, reason: `scoby ferment failed: ${state.failReason ?? "stopped"}`, terminate: true };
 	});
 
 	// Every request carries the current step (context only — not stored in the session).

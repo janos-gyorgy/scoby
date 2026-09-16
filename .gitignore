@@ -14,3 +14,5 @@ test/guard/*.out
 test/guard/scoby.json
 test/ferment/requests.jsonl
 test/ferment/*.out
+test/ferment/requests-*.jsonl
+test/ferment/answer-*.out

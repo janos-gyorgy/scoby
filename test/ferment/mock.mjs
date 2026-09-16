@@ -21,6 +21,11 @@ http.createServer((req, res) => {
   let body = ""; req.on("data", (c) => (body += c));
   req.on("end", () => {
     const payload = JSON.parse(body);
+    if (req.url.startsWith("/plan-busy/")) {
+      fs.appendFileSync(log, JSON.stringify({ kind: "plan-busy" }) + "\n");
+      res.writeHead(503, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ error: { code: 503, message: "Service temporarily overloaded (mock)" } }));
+    }
     if (req.url.startsWith("/plan/")) {
       // both real ferment runs planned with an EMPTY goal and this mock never noticed — now it checks
       fs.appendFileSync(log, JSON.stringify({ kind: "plan", sawGoal: body.includes("warn me before it runs out") }) + "\n");
