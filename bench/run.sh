@@ -26,13 +26,14 @@ cat > "$OUT/scoby.json" <<EOF
 {
   "connections": {
     "nim": { "baseUrl": "https://integrate.api.nvidia.com/v1", "apiKeyEnv": "NVIDIA_API_KEY", "models": [
+      { "id": "deepseek-ai/deepseek-v4-flash-0731", "contextWindow": 128000, "maxTokens": 8192 },
       { "id": "nvidia/nemotron-3-super-120b-a12b", "contextWindow": 128000, "maxTokens": 8192 },
       { "id": "openai/gpt-oss-20b", "contextWindow": 128000, "maxTokens": 8192 } ] },
     "gemini": { "provider": "google" },
     "groq": { "provider": "groq" }
   },
   "roles": {
-    "builder":   ["nim/nvidia/nemotron-3-super-120b-a12b", "nim/openai/gpt-oss-20b"],
+    "builder":   ["nim/deepseek-ai/deepseek-v4-flash-0731", "nim/nvidia/nemotron-3-super-120b-a12b", "nim/openai/gpt-oss-20b"],
     "planner":   ["nim/nvidia/nemotron-3-super-120b-a12b"],
     "compactor": ["nim/nvidia/nemotron-3-super-120b-a12b"],
     "judge":     ["groq/openai/gpt-oss-120b"]

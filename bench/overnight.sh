@@ -15,7 +15,7 @@ export NVIDIA_API_KEY=$(key nvidia) GEMINI_API_KEY=$(key gemini) GROQ_API_KEY=$(
 [ -n "$NVIDIA_API_KEY" ] || { echo "no keys from cluster secret — aborting"; exit 1; }
 
 for attempt in 1 2 3; do
-	if node "$ROOT/bench/preflight.mjs"; then
+	if node "$ROOT/bench/preflight.mjs" "${PREFLIGHT_MODEL:-deepseek-ai/deepseek-v4-flash-0731}"; then
 		echo "preflight ok (attempt $attempt) — starting sweep"
 		SUFFIX=${SUFFIX:-r3} RUN_TIMEOUT=${RUN_TIMEOUT:-3600} BENCH_DIR=$BENCH_DIR "$ROOT/bench/sweep.sh" > "$BENCH_DIR/sweep-${SUFFIX:-r3}.log" 2>&1
 		echo "sweep exit=$? $(date -Is)"; tail -5 "$BENCH_DIR/sweep-${SUFFIX:-r3}.log"
