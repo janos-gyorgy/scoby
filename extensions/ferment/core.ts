@@ -181,6 +181,28 @@ export function next(state: State): Action {
 	return { kind: "complete" };
 }
 
+const STOPWORDS = new Set(("a an and are as at be build but by can do does feature for from have how i in into is it its " +
+	"make me more my of on or so that the then this to track was what when which will with you your only never not " +
+	"any unless need needs run should step steps new existing add adds").split(" "));
+
+/** Content words of a text, lowercased, for a cheap relevance check. */
+export function keywords(text: string): Set<string> {
+	return new Set((text.toLowerCase().match(/[a-z][a-z-]{3,}/g) ?? []).filter((w) => !STOPWORDS.has(w)));
+}
+
+/**
+ * Does the plan talk about the goal at all? ferment-32k-r5's planner turned "track how much starter I
+ * have" into "add a notes field to log entries" and the harness then built that faithfully. A human
+ * checkpoint catches this; without one, a deterministic floor: the plan must reuse enough of the
+ * goal's own words. Cheap, crude, and it rejects exactly that failure.
+ */
+export function planMatchesGoal(goalFeature: string, plan: PlanInput & { goal?: string }, minShared = 3): { ok: boolean; shared: string[] } {
+	const goal = keywords(goalFeature);
+	const planText = [plan.goal ?? "", ...(plan.criteria ?? []), ...plan.phases.flatMap((p) => [p.title, ...p.steps.map((s) => `${s.title} ${s.detail ?? ""}`)])].join(" ");
+	const shared = [...keywords(planText)].filter((w) => goal.has(w));
+	return { ok: shared.length >= minShared, shared };
+}
+
 /** What the model is told on every request while a step is active. Bounded: it rides on every request. */
 export function stepBrief(state: State, phaseId: string, stepId: string, resume: boolean, maxChars = 6000): string {
 	const p = state.phases.find((x) => x.id === phaseId)!;

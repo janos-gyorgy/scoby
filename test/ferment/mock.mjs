@@ -22,9 +22,11 @@ http.createServer((req, res) => {
   req.on("end", () => {
     const payload = JSON.parse(body);
     if (req.url.startsWith("/plan/")) {
-      fs.appendFileSync(log, JSON.stringify({ kind: "plan" }) + "\n");
+      // both real ferment runs planned with an EMPTY goal and this mock never noticed — now it checks
+      fs.appendFileSync(log, JSON.stringify({ kind: "plan", sawGoal: body.includes("warn me before it runs out") }) + "\n");
       return sse(res, payload.model, JSON.stringify({
-        criteria: ["stock tracked"], assumptions: ["litres"],
+        goal: "Track how much starter there is and warn before it runs out",
+        criteria: ["starter stock tracked", "warn before starter runs out"], assumptions: ["litres"],
         phases: [{ title: "backend", steps: [{ title: "migration", detail: "add a column" }, { title: "route", detail: "expose it" }] },
                  { title: "frontend", steps: [{ title: "page", detail: "show it" }] }],
       }));

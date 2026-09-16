@@ -32,6 +32,7 @@ console.log("agent steps:", reqs.filter((r) => r.kind === "agent").map((r) => r.
 console.log("plan calls:", reqs.filter((r) => r.kind === "plan").length, "judge calls:", reqs.filter((r) => r.kind === "judge").length, "judge saw diff:", reqs.filter((r) => r.kind === "judge").every((r) => r.sawDiff));
 const checks = {
   "planned first": ferment[0] === "planned",
+  "the planner actually received the goal": reqs.filter((r) => r.kind === "plan").every((r) => r.sawGoal),
   "every step started and finished, in order": ["step-1.1","step-1.2","step-2.1"].every((s) => ferment.includes("step_started:" + s) && ferment.includes("step_finished:" + s)),
   "gate ran per phase": ferment.filter((e) => e.startsWith("gate_passed")).length === 2,
   "judge graded both phases": ferment.filter((e) => e.startsWith("phase_graded")).length === 2,

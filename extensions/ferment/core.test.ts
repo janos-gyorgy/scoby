@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { apply, initial, MAX_STEP_STARTS, next, stepBrief, type Event, type State } from "./core.ts";
+import { apply, initial, MAX_STEP_STARTS, next, planMatchesGoal, stepBrief, type Event, type State } from "./core.ts";
 
 const plan = {
 	criteria: ["stock is tracked"],
@@ -123,4 +123,25 @@ test("stepBrief carries goal, plan with statuses, and only the current step's de
 	assert.match(brief, /add columns/);
 	assert.match(brief, /phase-2 frontend \[planned\]/);
 	assert.match(brief, /Do ONLY this step/);
+});
+
+test("planMatchesGoal rejects the real ferment-32k-r5 plan and accepts an on-goal one", () => {
+	const goal = `To brew kombucha you need a healthy amount of starter liquid ready. Starter is made via the standard
+process — an F1 brewed with the dedicated starter recipe, seeded from existing starter liquid — then stored in the
+fridge. So making more takes a full F1 cycle. Build a feature that tracks how much starter I have, plans brewing
+more when stock runs low, and notifies me in time.`;
+	const wrong = {
+		criteria: ["Fermentation log entries can include optional free-form notes", "Notes field is persisted in the database and visible in the UI"],
+		phases: [
+			{ title: "Backend: Add notes column and verify API handling", steps: [{ title: "Create database migration for notes column" }, { title: "Verify API handles notes field" }] },
+			{ title: "Frontend: Update types, validation, and UI", steps: [{ title: "Add notes field to log entry form" }] },
+		],
+	};
+	const right = {
+		goal: "Track starter liquid stock, plan brewing more starter before it runs low, and notify in time.",
+		criteria: ["starter stock is tracked in litres", "starting an F1 batch consumes starter"],
+		phases: [{ title: "Stock tracking", steps: [{ title: "Add starter stock column", detail: "migration + schema" }] }],
+	};
+	assert.equal(planMatchesGoal(goal, wrong).ok, false, JSON.stringify(planMatchesGoal(goal, wrong).shared));
+	assert.equal(planMatchesGoal(goal, right).ok, true, JSON.stringify(planMatchesGoal(goal, right).shared));
 });

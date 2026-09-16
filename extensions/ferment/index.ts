@@ -1,6 +1,6 @@
 // Ferment — pi glue for the phase/step engine.
 //
-//   agent_start   -> plan the goal (planner role) before the model touches the repo
+//   before_agent_start -> plan the goal (planner role) before the model touches the repo
 //   context       -> append the current step's brief to every request (context only: it never
 //                    enters the session log, so it costs nothing to carry)
 //   agent_end     -> the model stopped: mark the step done, run gates at a phase boundary, judge
@@ -13,13 +13,14 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { RouterConfig } from "../router/core.ts";
 import type { RouterHandle } from "../router/index.ts";
 import { errorLines, newErrors, type GateRun } from "../guard/gates.ts";
-import { apply, initial, next, stepBrief, type Event, type PlanInput, type State } from "./core.ts";
+import { apply, initial, next, planMatchesGoal, stepBrief, type Event, type PlanInput, type State } from "./core.ts";
 
 const ENTRY = "scoby-ferment";
 
 const PLANNER_PROMPT = `You plan a coding task for an agent that will execute it one step at a time.
+The repository is described first; THE GOAL comes last — plan for that goal and nothing else.
 Reply with ONLY a JSON object:
-{"criteria":["..."],"assumptions":["..."],"phases":[{"title":"...","steps":[{"title":"...","detail":"what to change, which files, how to verify"}]}]}
+{"goal":"the goal restated in one sentence, in your own words","criteria":["..."],"assumptions":["..."],"phases":[{"title":"...","steps":[{"title":"...","detail":"what to change, which files, how to verify"}]}]}
 - 2-4 phases, 2-5 steps each; each step must be doable in one focused session.
 - Model the whole data flow the goal implies, including second-order effects (what consumes and what produces the same resource).
 - Nobody can answer questions: state assumptions explicitly instead of asking.
@@ -82,13 +83,36 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 		pi.appendEntry(ENTRY + "-meta", { event: "baseline", gates: baseline.map((g) => ({ cmd: g.cmd, code: g.code, errors: g.lines.length })) });
 	});
 
-	// Plan before the model's first call.
-	pi.on("agent_start", async (_event, ctx) => {
+	// Plan before the model's first call. The goal comes from the event, NOT the session: at
+	// agent_start the prompt is not in the session entries yet, so both ferment runs (r4, r5) planned
+	// with an EMPTY goal — r4 invented "store stock in a JSON file", r5 "add a notes field".
+	pi.on("before_agent_start", async (event: any, ctx) => {
 		if (state) return;
-		const goal = textOf((ctx.sessionManager.getEntries().find((e: any) => e.type === "message" && e.message?.role === "user") as any)?.message);
+		const goal = String(event.prompt ?? "").trim();
+		if (!goal) {
+			pi.appendEntry(ENTRY + "-meta", { event: "no_goal" });
+			return;
+		}
 		state = initial(goal);
 		try {
-			const plan = parseJSON<PlanInput>(await ask(ctx, "planner", `${PLANNER_PROMPT}\n\n## Goal\n${goal}\n\n${repoContext(ctx)}`, 4096));
+			// repo context first, the goal LAST: with the goal on top and ~8K chars of repo after it,
+			// the r5 planner lost the task and planned an unrelated "notes" feature
+			const prompt = (extra = "") => `${PLANNER_PROMPT}\n\n${repoContext(ctx)}\n\n## THE GOAL (plan for exactly this)\n${goal}${extra}`;
+			let plan = parseJSON<PlanInput & { goal?: string }>(await ask(ctx, "planner", prompt(), 4096));
+			let check = planMatchesGoal(goal, plan);
+			if (!check.ok) {
+				pi.appendEntry(ENTRY + "-meta", { event: "plan_off_goal", restated: plan.goal, shared: check.shared });
+				plan = parseJSON<PlanInput & { goal?: string }>(await ask(ctx, "planner", prompt(
+					`\n\nYour previous plan restated the goal as "${plan.goal ?? "?"}" — that is not the goal above. Plan again, for the goal above.`,
+				), 4096));
+				check = planMatchesGoal(goal, plan);
+			}
+			if (!check.ok) {
+				// refusing beats building the wrong feature faithfully for an hour
+				state = apply(state!, { type: "failed", reason: `plan does not match the goal (restated as: ${plan.goal ?? "?"})` });
+				pi.appendEntry(ENTRY, { type: "failed", reason: "plan does not match the goal" } as any);
+				return;
+			}
 			record({ type: "planned", plan });
 			const first = next(state!);
 			if (first.kind === "activate_phase") record({ type: "phase_activated", phaseId: first.phaseId });
