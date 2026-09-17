@@ -40,6 +40,10 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 	let state: State | undefined;
 	let baseline: GateRun[] | undefined;
 	let busy = false;
+	// Set when the run must stop WITHOUT recording a failure: no model is available right now. The
+	// state stays as it is in the session, and a later `pi --session <file>` continues from there.
+	let deferred = false;
+	const isUnavailable = (e: unknown) => /unavailable after \d+ attempts/.test(String(e));
 
 	const record = (event: Event) => {
 		state = apply(state!, event);
@@ -120,8 +124,20 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 	// agent_start the prompt is not in the session entries yet, so both ferment runs (r4, r5) planned
 	// with an EMPTY goal — r4 invented "store stock in a JSON file", r5 "add a notes field".
 	pi.on("before_agent_start", async (event: any, ctx) => {
-		if (state) return;
-		const goal = String(event.prompt ?? "").trim();
+		if (state) {
+			// a resumed session: let the engine catch up (gate, judge, next phase) before the model's turn
+			if (state.status === "running") {
+				await advance(ctx, false);
+			} else {
+				deferred = true; // complete or genuinely failed: nothing for the model to do
+			}
+			return;
+		}
+		// the goal is the session's FIRST prompt: a resumed session is continued with "Continue the task",
+		// which must never become the goal. On a fresh session the prompt isn't stored yet (r4/r5), so
+		// fall back to the event's prompt.
+		const firstUser = (ctx.sessionManager.getEntries().find((e: any) => e.type === "message" && e.message?.role === "user") as any)?.message;
+		const goal = (textOf(firstUser) || String(event.prompt ?? "")).trim();
 		if (!goal) {
 			pi.appendEntry(ENTRY + "-meta", { event: "no_goal" });
 			return;
@@ -159,6 +175,13 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 		} catch (e) {
 			// planning failed: STOP. Silently degrading to a plain agent loop (what r6 did) produces a run
 			// that looks valid and isn't what was asked for.
+			if (isUnavailable(e)) {
+				// no model right now is not a verdict on the task: record nothing, plan again on resume
+				pi.appendEntry(ENTRY + "-meta", { event: "plan_deferred", error: String(e).slice(0, 300) });
+				state = undefined;
+				deferred = true;
+				return;
+			}
 			pi.appendEntry(ENTRY + "-meta", { event: "plan_failed", error: String(e).slice(0, 300), stack: e instanceof Error ? e.stack?.split("\n").slice(0, 3).join(" | ") : undefined, reply: lastReply.slice(0, 600) });
 			state = apply(state!, { type: "failed", reason: `planning failed: ${String(e).slice(0, 200)}` });
 			pi.appendEntry(ENTRY, { type: "failed", reason: "planning failed" } as any);
@@ -168,12 +191,12 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 	});
 
 	// A failed ferment must not degrade into a plain agent run.
-	const failedEarly = () => state?.status === "failed" && state.phases.length === 0;
+	const mustStop = () => deferred || state?.status === "failed" || state?.status === "complete";
 	pi.on("agent_start", async (_event, ctx) => {
-		if (failedEarly()) ctx.abort();
+		if (mustStop()) ctx.abort();
 	});
 	pi.on("tool_call", async () => {
-		if (state?.status === "failed") return { block: true, reason: `scoby ferment failed: ${state.failReason ?? "stopped"}`, terminate: true };
+		if (mustStop()) return { block: true, reason: deferred ? "scoby: waiting for model capacity" : `scoby ferment ${state?.status}`, terminate: true };
 	});
 
 	// Every request carries the current step (context only — not stored in the session).
@@ -207,7 +230,7 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 	});
 
 	/** Run engine actions that need no model turn, then trigger the next step (or stop). */
-	async function advance(ctx: ExtensionContext) {
+	async function advance(ctx: ExtensionContext, trigger = true) {
 		for (let i = 0; i < 12; i++) {
 			const a = next(state!);
 			switch (a.kind) {
@@ -233,14 +256,21 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 						);
 						record({ type: "phase_graded", phaseId: a.phaseId, grade: verdict.grade, rationale: verdict.rationale, fix: verdict.fix });
 					} catch (e) {
-						// a judge that cannot answer must not stall the run: pass the phase, note it
-						pi.appendEntry(ENTRY + "-meta", { event: "judge_failed", phaseId: a.phaseId, error: String(e).slice(0, 200) });
-						record({ type: "phase_graded", phaseId: a.phaseId, grade: "C", rationale: "judge unavailable" });
+						pi.appendEntry(ENTRY + "-meta", { event: isUnavailable(e) ? "judge_deferred" : "judge_failed", phaseId: a.phaseId, error: String(e).slice(0, 200) });
+						if (isUnavailable(e)) {
+							// no fake grade: stop, and judge again when the session is resumed
+							deferred = true;
+							ctx.abort();
+							return;
+						}
+						record({ type: "phase_graded", phaseId: a.phaseId, grade: "C", rationale: "judge could not produce a grade" });
 					}
 					break;
 				}
 				case "run_step":
-					record({ type: "step_started", phaseId: a.phaseId, stepId: a.stepId });
+					// a step already running (resumed session) is not a new start — the stuck guard counts starts
+					if (!a.resume) record({ type: "step_started", phaseId: a.phaseId, stepId: a.stepId });
+					if (!trigger) return; // the run is starting anyway (resume): the brief rides on its requests
 					pi.sendMessage(
 						{ customType: ENTRY, content: `[scoby] Next: ${a.stepId}. The step brief is in your context.`, display: true },
 						{ triggerTurn: true, deliverAs: "followUp" },

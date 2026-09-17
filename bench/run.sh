@@ -49,6 +49,14 @@ cat > "$OUT/scoby.json" <<EOF
 }
 EOF
 
+# pi's own retry: hung requests fail over after 2 minutes instead of 5 (r9 lost most of its window to
+# 5-minute timeouts), and a few more agent-level retries before a run gives up
+cat > "$OUT/agent/settings.json" <<EOF
+{ "retry": { "enabled": true, "maxRetries": ${PI_MAX_RETRIES:-4}, "baseDelayMs": ${PI_BASE_DELAY_MS:-2000},
+             "provider": { "timeoutMs": ${PI_PROVIDER_TIMEOUT_MS:-120000} } } }
+EOF
+[ "${SETUP_ONLY:-0}" = "1" ] && { echo "workspace ready: $OUT"; exit 0; }
+
 ARGS=(-p --session-dir "$OUT/sessions" -e "$ROOT/extensions/scoby/index.ts")
 if [ "$MODE" = "native" ]; then
 	ARGS+=(--budget 10000000) # effectively no shaping; pi's own compaction stays on

@@ -52,6 +52,11 @@ http.createServer((req, res) => {
       fs.appendFileSync(log, JSON.stringify({ kind: "judge", sawDiff: body.includes("## diff") }) + "\n");
       return sse(res, payload.model, JSON.stringify({ grade: "B", rationale: "fine", fix: "" }));
     }
+    if (process.env.DOWN_FLAG && fs.existsSync(process.env.DOWN_FLAG)) {
+      fs.appendFileSync(log, JSON.stringify({ kind: "agent-down" }) + "\n");
+      res.writeHead(503, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ error: { code: 503, message: "Service temporarily overloaded (mock outage)" } }));
+    }
     const text = JSON.stringify(payload.messages ?? []);
     const step = (text.match(/YOUR CURRENT STEP: (step-[\d.]+)/) || [])[1] ?? "none";
     fs.appendFileSync(log, JSON.stringify({ kind: "agent", step, brief: text.includes("Do ONLY this step") }) + "\n");

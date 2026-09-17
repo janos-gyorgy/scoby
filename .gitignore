@@ -16,3 +16,4 @@ test/ferment/requests.jsonl
 test/ferment/*.out
 test/ferment/requests-*.jsonl
 test/ferment/answer-*.out
+test/ferment/supervisor.out
