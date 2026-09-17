@@ -3,17 +3,18 @@
   "version": "1.0.0",
   "description": "A free Kimchi: pi extensions for role routing across free-tier APIs, with budget-first compaction",
   "scripts": {
-    "test": "node --experimental-strip-types --no-warnings --test extensions/router/core.test.ts extensions/compaction/shaper.test.ts extensions/compaction/fold.test.ts extensions/guard/gates.test.ts extensions/ferment/core.test.ts",
+    "test": "node --experimental-strip-types --no-warnings --test extensions/router/core.test.ts extensions/compaction/shaper.test.ts extensions/compaction/fold.test.ts extensions/guard/gates.test.ts extensions/ferment/core.test.ts extensions/notify/ntfy.test.ts",
     "test:router": "test/router/run.sh",
     "test:failover": "test/failover/run.sh",
     "test:compaction": "test/compaction/run.sh",
     "test:resume": "test/router/run-glitch.sh",
     "test:guard": "test/guard/run.sh",
-    "test:all": "npm test && npm run test:router && npm run test:resume && npm run test:compaction && npm run test:guard && npm run test:ferment && npm run test:plan-failover && npm run test:patient",
+    "test:all": "npm test && npm run test:router && npm run test:resume && npm run test:compaction && npm run test:guard && npm run test:ferment && npm run test:plan-failover && npm run test:patient && npm run test:interactive",
     "test:gemini-handoff": "test/router/run-gemini-handoff.sh",
     "test:ferment": "test/ferment/run.sh",
     "test:plan-failover": "test/ferment/run-plan-failover.sh",
-    "test:patient": "test/ferment/run-patient.sh"
+    "test:patient": "test/ferment/run-patient.sh",
+    "test:interactive": "test/interactive/run.sh"
   },
   "author": "",
   "license": "ISC",

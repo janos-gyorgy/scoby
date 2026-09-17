@@ -7,6 +7,23 @@ request fits the limits free tiers actually allow.
 
 Personal project / blog material. **No maintenance promised.**
 
+## Using it
+
+```
+cd ~/git/some-repo
+scoby                      # = pi + the scoby extension, keys pulled from the cluster
+```
+
+1. Type what you want built. scoby asks once: **Plan & build** or **Just answer** (chat stays chat).
+2. You get a plan above the editor: **Approve**, **Change…** (one sentence → a revised plan), or **Cancel**.
+3. It builds on a new `scoby/<goal>` branch, one step at a time, with gates and an independent judge
+   between phases. Progress sits above the editor; `/ferment` shows it too.
+4. If every model is down, it waits inside pi and carries on by itself when one answers.
+5. Your phone (ntfy topic `scoby`): plan ready, phase grades, "needs you", long waits, finished.
+
+Config: `./.scoby.json` in the repo, else `~/.config/scoby/config.json` (see `scoby.example.json`).
+Unattended runs without a terminal: `bench/patient.sh <label> <budget>` (waits out outages for days).
+
 ## Router
 
 ```

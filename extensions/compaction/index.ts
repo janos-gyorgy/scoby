@@ -41,7 +41,9 @@ export function setupCompaction(pi: ExtensionAPI, cfg: RouterConfig, router: Rou
 	let lastInput: Msg[] | undefined; // unshaped context of the latest request — what a fold looks at
 	let folding = false;
 
-	const providerOf = (ctx: ExtensionContext) => ctx.model?.provider ?? "unknown";
+	// keyed by MODEL: p1 ran three NIM models with different tokenizers under one "nim" scale, which
+	// swung to 0.476 and let 17 requests through over budget (max 76.9K of 32K)
+	const providerOf = (ctx: ExtensionContext) => `${ctx.model?.provider ?? "unknown"}/${ctx.model?.id ?? "?"}`;
 	const charsPerToken = (_provider: string) => DEFAULT_CPT;
 	const scaleOf = (provider: string) => scale.get(provider) ?? 1;
 	/** tokens the messages may take, in the shaper's units, for this budget */

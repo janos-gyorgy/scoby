@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Open pi with scoby. Keys come from the cluster (namespace scoby), never from files in this repo.
+#   scoby [pi args...]      e.g.  cd ~/git/some-repo && scoby
+set -euo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+export PATH="$HOME/.local/node22/bin:$PATH"
+key() { kubectl -n scoby get secret "$1" -o "jsonpath={.data.$2}" 2>/dev/null | base64 -d; }
+export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$(key scoby-llm-keys nvidia)}"
+export GEMINI_API_KEY="${GEMINI_API_KEY:-$(key scoby-llm-keys gemini)}"
+export GROQ_API_KEY="${GROQ_API_KEY:-$(key scoby-llm-keys groq)}"
+export NTFY_TOKEN="${NTFY_TOKEN:-$(key scoby-ntfy publish-token)}"
+[ -n "$NVIDIA_API_KEY" ] || echo "scoby: no NIM key from the cluster (kubectl -n scoby get secret scoby-llm-keys)" >&2
+exec "$ROOT/node_modules/.bin/pi" -e "$ROOT/extensions/scoby/index.ts" "$@"

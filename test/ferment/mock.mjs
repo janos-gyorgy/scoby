@@ -40,7 +40,7 @@ http.createServer((req, res) => {
     }
     if (req.url.startsWith("/plan/")) {
       // both real ferment runs planned with an EMPTY goal and this mock never noticed — now it checks
-      fs.appendFileSync(log, JSON.stringify({ kind: "plan", sawGoal: body.includes("warn me before it runs out") }) + "\n");
+      fs.appendFileSync(log, JSON.stringify({ kind: "plan", sawGoal: body.includes("warn me before it runs out"), sawFeedback: body.includes("starter batch consumes starter") }) + "\n");
       return sse(res, payload.model, JSON.stringify({
         goal: "Track how much starter there is and warn before it runs out",
         criteria: ["starter stock tracked", "warn before starter runs out"], assumptions: ["litres"],
@@ -57,9 +57,14 @@ http.createServer((req, res) => {
       res.writeHead(503, { "content-type": "application/json" });
       return res.end(JSON.stringify({ error: { code: 503, message: "Service temporarily overloaded (mock outage)" } }));
     }
+    // a plain completion with no tools (scoby's capacity probe): just answer
+    if (!payload.tools || payload.tools.length === 0) {
+      fs.appendFileSync(log, JSON.stringify({ kind: "probe" }) + "\n");
+      return sse(res, payload.model, "OK");
+    }
     const text = JSON.stringify(payload.messages ?? []);
     const step = (text.match(/YOUR CURRENT STEP: (step-[\d.]+)/) || [])[1] ?? "none";
-    fs.appendFileSync(log, JSON.stringify({ kind: "agent", step, brief: text.includes("Do ONLY this step") }) + "\n");
+    fs.appendFileSync(log, JSON.stringify({ kind: "agent", step, brief: text.includes("Do ONLY this step"), chat: text.includes("what is a scoby") }) + "\n");
     if (!worked.has(step)) { worked.add(step); return sse(res, payload.model, null, `echo working on ${step} >> steps.txt`); }
     return sse(res, payload.model, `${step} done`);
   });

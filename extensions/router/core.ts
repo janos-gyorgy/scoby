@@ -55,7 +55,15 @@ export interface RouterConfig {
 		enabled?: boolean;
 		/** gate commands for phase boundaries (defaults to finish.gates) */
 		gates?: string[];
+		/** interactive: build on a new scoby/<goal> branch (default true) */
+		branch?: boolean;
+		/** interactive: how often to probe for models while waiting (default 600) */
+		waitIntervalSeconds?: number;
+		/** interactive: phone notification once a wait is this long (default 1800) */
+		waitNotifyAfterSeconds?: number;
 	};
+	/** ntfy push notifications (plan ready, phase grades, needs-you, finished, long waits) */
+	notify?: { url?: string; topic?: string; tokenEnv?: string };
 	finish?: {
 		/** commands (no shell) that must show no NEW errors vs. session start before a run may end */
 		gates?: string[];

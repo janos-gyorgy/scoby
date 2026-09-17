@@ -36,7 +36,7 @@ cat > "$OUT/scoby.json" <<EOF
   },
   "policy": { "repoContentLeavesMachine": true },
   "roles": {
-    "builder":   ["nim/deepseek-ai/deepseek-v4-flash-0731", "nim/nvidia/nemotron-3-super-120b-a12b", "nim/openai/gpt-oss-20b"],
+    "builder":   ["nim/deepseek-ai/deepseek-v4-flash-0731", "nim/nvidia/nemotron-3-super-120b-a12b"],
     "planner":   ["nim/nvidia/nemotron-3-super-120b-a12b"],
     "compactor": ["nim/nvidia/nemotron-3-super-120b-a12b"],
     "judge":     ["groq/openai/gpt-oss-120b"]

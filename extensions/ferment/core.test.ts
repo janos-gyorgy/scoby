@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { apply, assertPlanShape, initial, MAX_STEP_STARTS, next, planMatchesGoal, stepBrief, type Event, type State } from "./core.ts";
+import { apply, assertPlanShape, initial, latestRun, MAX_STEP_STARTS, next, planMatchesGoal, renderPlan, renderProgress, stepBrief, type Event, type State } from "./core.ts";
 
 const plan = {
 	criteria: ["stock is tracked"],
@@ -154,4 +154,30 @@ test("assertPlanShape: a phase without steps (ferment-32k-r8) is a readable reje
 	assert.doesNotThrow(() => assertPlanShape({ phases: [{ title: "x", steps: [{ title: "y" }] }] }));
 	// and the goal check never crashes on a malformed plan
 	assert.doesNotThrow(() => planMatchesGoal("track starter stock", r8like as any));
+});
+
+test("latestRun folds only the newest build in a session", () => {
+	const one: Event[] = [
+		{ type: "planned", goal: "first", plan: { phases: [{ title: "a", steps: [{ title: "x" }] }] } },
+		{ type: "failed", reason: "done with it" },
+	];
+	const two: Event[] = [{ type: "planned", goal: "second", plan }];
+	assert.equal(latestRun([]), undefined);
+	const s = latestRun([...one, ...two])!;
+	assert.equal(s.goal, "second");
+	assert.equal(s.status, "running");
+	assert.equal(s.phases.length, 2);
+});
+
+test("renderPlan and renderProgress show what a human needs", () => {
+	const lines = renderPlan({ goal: "track starter", ...plan }, 2).join("\n");
+	assert.match(lines, /revision 2/);
+	assert.match(lines, /Goal: track starter/);
+	assert.match(lines, /1\.1 migration/);
+	let s = planned();
+	s = apply(s, { type: "phase_activated", phaseId: "phase-1" });
+	s = apply(s, { type: "step_started", phaseId: "phase-1", stepId: "step-1.1" });
+	const progress = renderProgress(s, "waiting for models").join("\n");
+	assert.match(progress, /0\/3 steps · waiting for models/);
+	assert.match(progress, /▶ migration/);
 });
