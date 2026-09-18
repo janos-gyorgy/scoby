@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Open pi with scoby. Keys come from the cluster (namespace scoby), never from files in this repo.
+# Open pi with scoby. Keys come from the environment / ~/.config/scoby/env, never from files in this repo.
 #   scoby [pi args...]      e.g.  cd ~/git/some-repo && scoby
 set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 export PATH="$HOME/.local/node22/bin:$PATH"
-key() { kubectl -n scoby get secret "$1" -o "jsonpath={.data.$2}" 2>/dev/null | base64 -d; }
+# keys: the environment, else ~/.config/scoby/env (KEY=value lines), else (my homelab) the cluster
+[ -f "$HOME/.config/scoby/env" ] && { set -a; . "$HOME/.config/scoby/env"; set +a; }
+key() { command -v kubectl >/dev/null && kubectl -n scoby get secret "$1" -o "jsonpath={.data.$2}" 2>/dev/null | base64 -d; }
 export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$(key scoby-llm-keys nvidia)}"
 export GEMINI_API_KEY="${GEMINI_API_KEY:-$(key scoby-llm-keys gemini)}"
 export GROQ_API_KEY="${GROQ_API_KEY:-$(key scoby-llm-keys groq)}"
 export NTFY_TOKEN="${NTFY_TOKEN:-$(key scoby-ntfy publish-token)}"
-[ -n "$NVIDIA_API_KEY" ] || echo "scoby: no NIM key from the cluster (kubectl -n scoby get secret scoby-llm-keys)" >&2
+[ -n "$NVIDIA_API_KEY$GEMINI_API_KEY$GROQ_API_KEY" ] || echo "scoby: no provider key in the environment or ~/.config/scoby/env" >&2
 exec "$ROOT/node_modules/.bin/pi" -e "$ROOT/extensions/scoby/index.ts" "$@"

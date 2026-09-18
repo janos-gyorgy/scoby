@@ -17,8 +17,8 @@
     "test:lock": "test/ferment/run-lock.sh",
     "test:interactive": "test/interactive/run.sh"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "J\u00e1nos Gy\u00f6rgy",
+  "license": "MIT",
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.85.1"
   },
@@ -30,5 +30,10 @@
     "extensions": [
       "./extensions/scoby/index.ts"
     ]
+  },
+  "repository": "github:janos-gyorgy/scoby",
+  "bin": {
+    "scoby": "bin/scoby",
+    "scoby-run": "bin/scoby-run"
   }
 }
