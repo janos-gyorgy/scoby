@@ -35,6 +35,20 @@ if [ -n "$GOAL" ] && [ -f "$STATE/lock.json" ]; then
 	exit 2
 fi
 
+# never build on main/master unattended: like the TUI, work on a scoby/<goal>-<date> branch
+if [ -n "$GOAL" ] && git -C "$REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+	branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD)
+	case "$branch" in
+	scoby/*) ;;
+	*)
+		slug=$(printf '%s' "$GOAL" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//;s/-$//' | cut -c1-40)
+		new="scoby/${slug:-build}-$(date -u +%F)"
+		git -C "$REPO" checkout -q -b "$new" 2>/dev/null || git -C "$REPO" checkout -q "$new" || { echo "scoby-run: could not create branch $new" >&2; exit 2; }
+		say "branch $new (from $branch)"
+		;;
+	esac
+fi
+
 MODELS=${MODELS:-"deepseek-ai/deepseek-v4-flash-0731 nvidia/nemotron-3-super-120b-a12b"}
 capacity() {
 	if [ -n "${CAPACITY_CMD:-}" ]; then eval "$CAPACITY_CMD"; return; fi
