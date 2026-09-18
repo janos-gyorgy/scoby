@@ -12,23 +12,25 @@ import os from "node:os";
 import path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { isRetryableAssistantError } from "@earendil-works/pi-ai";
-import { classifyError, patchGeminiSignatures, Router, validateConfig, type RouterConfig, type Target } from "./core.ts";
+import { classifyError, mergeConfig, patchGeminiSignatures, Router, validateConfig, type RouterConfig, type Target } from "./core.ts";
 
 const ENTRY = "scoby-router";
 
-export function findConfig(): string | undefined {
-	const candidates = [
-		process.env.SCOBY_CONFIG,
-		path.join(process.cwd(), ".scoby.json"),
-		path.join(os.homedir(), ".config", "scoby", "config.json"),
-	].filter(Boolean) as string[];
-	return candidates.find((p) => fs.existsSync(p));
+/** Global config, plus a repo-local overlay. SCOBY_CONFIG replaces both (tests, bench). */
+export function findConfig(): { global?: string; local?: string } {
+	if (process.env.SCOBY_CONFIG) return { global: process.env.SCOBY_CONFIG };
+	const global = path.join(os.homedir(), ".config", "scoby", "config.json");
+	const local = path.join(process.cwd(), ".scoby.json");
+	return { global: fs.existsSync(global) ? global : undefined, local: fs.existsSync(local) ? local : undefined };
 }
 
 export function loadConfig(): { cfg: RouterConfig; configPath: string } | undefined {
-	const configPath = findConfig();
-	if (!configPath) return undefined; // no config = no scoby; pi works as usual
-	const cfg = JSON.parse(fs.readFileSync(configPath, "utf8")) as RouterConfig;
+	const found = findConfig();
+	if (!found.global && !found.local) return undefined; // no config = no scoby; pi works as usual
+	const read = (p: string) => JSON.parse(fs.readFileSync(p, "utf8")) as RouterConfig;
+	// a repo-local file alone is a full config; next to a global one it is an overlay
+	const cfg = found.global && found.local ? mergeConfig(read(found.global), read(found.local)) : read((found.local ?? found.global)!);
+	const configPath = [found.global, found.local].filter(Boolean).join(" + ");
 	const problems = validateConfig(cfg);
 	if (problems.length) {
 		throw new Error(`scoby: invalid config ${configPath}:\n  - ${problems.join("\n  - ")}`);

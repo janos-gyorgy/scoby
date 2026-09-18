@@ -4,11 +4,12 @@
 import fs from "node:fs";
 import path from "node:path";
 
+//   node ferment-state.mjs <session.jsonl>  -> the same, for one session file (bin/scoby-run)
 const [out, phase] = process.argv.slice(2);
 const dir = path.join(out, "sessions");
-const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".jsonl")).map((f) => path.join(dir, f)) : [];
+const files = out.endsWith(".jsonl") ? [out] : fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".jsonl")).map((f) => path.join(dir, f)) : [];
 files.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-const entries = files[0] ? fs.readFileSync(files[0], "utf8").trim().split("\n").filter(Boolean).map(JSON.parse) : [];
+const entries = files[0] && fs.existsSync(files[0]) ? fs.readFileSync(files[0], "utf8").trim().split("\n").filter(Boolean).map(JSON.parse) : [];
 const ev = entries.filter((e) => e.type === "custom" && e.customType === "scoby-ferment").map((e) => e.data);
 const meta = entries.filter((e) => e.type === "custom" && e.customType === "scoby-ferment-meta").map((e) => e.data);
 

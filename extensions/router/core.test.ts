@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyError, GEMINI_PLACEHOLDER_SIGNATURE, parseTarget, patchGeminiSignatures, Router, validateConfig, type RouterConfig } from "./core.ts";
+import { classifyError, GEMINI_PLACEHOLDER_SIGNATURE, mergeConfig, parseTarget, patchGeminiSignatures, Router, validateConfig, type RouterConfig } from "./core.ts";
 
 const cfg: RouterConfig = {
 	connections: {
@@ -106,4 +106,21 @@ test("thinking level never inherits: explicit, else by reasoning capability", ()
 	assert.equal(Router.thinkingFor(gemini, true), "low");
 	assert.equal(Router.thinkingFor(groq, true), "low");
 	assert.equal(Router.thinkingFor(groq, false), "off");
+});
+
+test("mergeConfig: a repo-local overlay keeps the global connections and merges the run settings one level deep", () => {
+	const base: RouterConfig = {
+		connections: { nim: { baseUrl: "https://x/v1", models: [{ id: "m" }] } },
+		roles: { builder: ["nim/m"] },
+		policy: { repoContentLeavesMachine: true },
+		ferment: { enabled: true, waitIntervalSeconds: 600 },
+		finish: { maxNudges: 3 },
+	};
+	const cfg = mergeConfig(base, { finish: { gates: ["npx tsc --noEmit"] }, ferment: { branch: false } });
+	assert.deepEqual(cfg.connections, base.connections);
+	assert.deepEqual(cfg.finish, { maxNudges: 3, gates: ["npx tsc --noEmit"] });
+	assert.deepEqual(cfg.ferment, { enabled: true, waitIntervalSeconds: 600, branch: false });
+	assert.equal(validateConfig(cfg).length, 0);
+	// top-level roles replace, not merge (a repo that wants a different builder says so completely)
+	assert.deepEqual(mergeConfig(base, { roles: { builder: ["nim/m"], judge: ["nim/m"] } }).roles, { builder: ["nim/m"], judge: ["nim/m"] });
 });

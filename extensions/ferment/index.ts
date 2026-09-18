@@ -21,6 +21,7 @@ import type { RouterConfig } from "../router/core.ts";
 import type { RouterHandle } from "../router/index.ts";
 import { errorLines, newErrors, type GateRun } from "../guard/gates.ts";
 import { makeNotifier, type Notification } from "../notify/ntfy.ts";
+import { clearLock, readLock, refusal, repoRoot, writeLock } from "./lock.ts";
 import {
 	apply, assertPlanShape, initial, latestRun, next, planMatchesGoal, renderPlan, renderProgress, stepBrief,
 	type Event, type PlanInput, type State,
@@ -89,10 +90,39 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 		ctx.ui.setWidget(WIDGET, state ? renderProgress(state, note) : undefined);
 	}
 
-	/** Every engine event goes through here: state, session entry, panel, and the phone. */
+	// One build per repo: the lock names the session that owns the run in progress (lock.ts).
+	const sessionFile = (ctx: ExtensionContext): string => (ctx.sessionManager as any).getSessionFile?.() ?? "";
+	function holdLock(ctx: ExtensionContext) {
+		if (!state) return;
+		const root = repoRoot(ctx.cwd);
+		if (state.status !== "running") return clearLock(root);
+		const a = next(state);
+		const prev = readLock(root);
+		const mine = prev?.sessionFile === sessionFile(ctx) ? prev : undefined;
+		writeLock(root, {
+			sessionFile: sessionFile(ctx), pid: process.pid, goal: state.goal,
+			startedAt: mine?.startedAt ?? new Date().toISOString(), updatedAt: new Date().toISOString(),
+			step: a.kind === "run_step" ? a.stepId : undefined,
+		});
+	}
+	/** Refuses a NEW build while another session's run is in progress here. */
+	function locked(ctx: ExtensionContext): boolean {
+		const why = refusal(readLock(repoRoot(ctx.cwd)), sessionFile(ctx));
+		if (!why) return false;
+		pi.appendEntry(META, { event: "locked", by: readLock(repoRoot(ctx.cwd))?.sessionFile });
+		if (interactive(ctx)) ctx.ui.notify(why, "warning");
+		else {
+			process.stderr.write(why + "\n");
+			deferred = true;
+		}
+		return true;
+	}
+
+	/** Every engine event goes through here: state, session entry, panel, the lock, and the phone. */
 	function record(ctx: ExtensionContext, event: Event) {
 		state = apply(state!, event);
 		pi.appendEntry(ENTRY, event as any);
+		holdLock(ctx);
 		showProgress(ctx);
 		const title = state.goal.split("\n")[0].slice(0, 80);
 		if (event.type === "phase_graded") {
@@ -177,6 +207,7 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 
 	/** Plan, let the human approve or change it, then start the run. Returns false if nothing starts. */
 	async function planAndStart(ctx: ExtensionContext, goal: string): Promise<boolean> {
+		if (locked(ctx)) return false; // before spending a planner call
 		const feedback: { plan: Plan; ask: string }[] = [];
 		for (let round = 1; round <= 6; round++) {
 			let plan: Plan;
@@ -294,9 +325,21 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 		state = latestRun(events, textOf(firstUser));
 		baseline = runGates(ctx.cwd);
 		pi.appendEntry(META, { event: "baseline", gates: baseline.map((g) => ({ cmd: g.cmd, code: g.code, errors: g.lines.length })) });
-		if (state?.status === "running") showProgress(ctx, "resumed");
+		if (state?.status === "running") {
+			// resuming: take the lock (a run from before the lock existed has none yet); another live
+			// session's lock is only reported — the human chose to resume this one
+			const other = readLock(repoRoot(ctx.cwd));
+			if (other && other.sessionFile !== sessionFile(ctx)) {
+				pi.appendEntry(META, { event: "lock_conflict", by: other.sessionFile, pid: other.pid });
+				if (interactive(ctx)) ctx.ui.notify(`scoby: another session also has a build here (${other.sessionFile}); this one takes over`, "warning");
+			}
+			holdLock(ctx);
+			showProgress(ctx, "resumed");
+		}
 	});
 
+	// The lock stays on shutdown while the run is in progress: that is what makes an interrupted
+	// build visible to the next session (the owner resumes with --session, or drops it).
 	pi.on("session_shutdown", async () => {
 		if (waiting) clearInterval(waiting.timer);
 		waiting = undefined;
@@ -441,8 +484,17 @@ export function setupFerment(pi: ExtensionAPI, cfg: RouterConfig, router: Router
 	}
 
 	pi.registerCommand("ferment", {
-		description: "scoby: show the plan and where the current build is",
-		handler: async (_args, ctx) => {
+		description: "scoby: show the plan and where the current build is (/ferment unlock drops another session's interrupted build)",
+		handler: async (args, ctx) => {
+			if (String(args ?? "").trim() === "unlock") {
+				const root = repoRoot(ctx.cwd);
+				const held = readLock(root);
+				if (!held) return ctx.ui.notify("scoby: no build lock in this repo", "info");
+				if (held.sessionFile === sessionFile(ctx) && state?.status === "running") return ctx.ui.notify("scoby: that lock is this session's own running build", "warning");
+				clearLock(root);
+				pi.appendEntry(META, { event: "unlocked", by: held.sessionFile, step: held.step });
+				return ctx.ui.notify(`scoby: dropped the lock held by ${held.sessionFile}${held.step ? ` (was at ${held.step})` : ""}; its changes are still in the working tree`, "info");
+			}
 			if (!state) return ctx.ui.notify(waiting ? "scoby: waiting for models to plan" : "scoby: no build in this session", "info");
 			ctx.ui.notify(renderProgress(state, waiting ? "waiting for models" : undefined).join("\n"), "info");
 		},

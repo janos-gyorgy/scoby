@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Unattended build in the current repo: plan, build, wait out provider outages, resume, until the run
+# ends on its own terms. The session file is the state; the repo lock (.scoby/lock.json) names it.
+#
+#   cd ~/git/some-repo
+#   scoby-run "add ntfy notifications when a run ends"      start a build (the plan is accepted as is —
+#                                                          interactive scoby is where you approve plans)
+#   scoby-run                                              resume the build this repo's lock names
+#   scoby-run --session <file.jsonl>                       resume a specific session (e.g. one started in the TUI)
+#
+# Env: INTERVAL (seconds between capacity probes, 1200), MAX_DAYS (5), RUN_TIMEOUT (per invocation, 14400),
+#      MODELS (NIM models to probe for capacity), CAPACITY_CMD (replaces the probe).
+set -uo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+export PATH="$HOME/.local/node22/bin:$PATH"
+REPO=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+STATE="$REPO/.scoby"; mkdir -p "$STATE/sessions"
+LOG="$STATE/run.log"
+say() { echo "$(date -Is) $*" | tee -a "$LOG"; }
+
+SESSION=""; GOAL=""
+if [ "${1:-}" = "--session" ]; then SESSION=$2; shift 2; fi
+[ $# -gt 0 ] && GOAL="$*"
+if [ -z "$SESSION" ] && [ -z "$GOAL" ]; then
+	SESSION=$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).sessionFile)}catch{}' "$STATE/lock.json")
+	[ -n "$SESSION" ] || SESSION=$(ls -t "$STATE"/sessions/*.jsonl 2>/dev/null | head -1)
+	[ -n "$SESSION" ] || { echo "scoby-run: nothing to resume here — give a goal to start a build" >&2; exit 2; }
+fi
+if [ -n "$GOAL" ] && [ -f "$STATE/lock.json" ]; then
+	echo "scoby-run: this repo already has a build in progress (see .scoby/lock.json); run scoby-run without a goal to resume it" >&2
+	exit 2
+fi
+
+MODELS=${MODELS:-"deepseek-ai/deepseek-v4-flash-0731 nvidia/nemotron-3-super-120b-a12b"}
+capacity() {
+	if [ -n "${CAPACITY_CMD:-}" ]; then eval "$CAPACITY_CMD"; return; fi
+	for m in $MODELS; do node "$ROOT/bench/preflight.mjs" "$m" >> "$LOG" 2>&1 && return 0; done
+	return 1
+}
+state() { [ -n "$SESSION" ] && [ -f "$SESSION" ] && node "$ROOT/bench/ferment-state.mjs" "$SESSION" || echo none; }
+
+START=$(date +%s); DEADLINE=$((START + ${MAX_DAYS:-5} * 86400)); n=0
+while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+	case "$(state)" in complete|failed) break ;; esac
+	until capacity; do
+		say "no capacity — next check in ${INTERVAL:-1200}s"
+		sleep "${INTERVAL:-1200}"
+		[ "$(date +%s)" -lt "$DEADLINE" ] || break 2
+	done
+	n=$((n + 1))
+	if [ -z "$SESSION" ]; then ARGS=(--session-dir "$STATE/sessions"); P="$GOAL"; else ARGS=(--session "$SESSION"); P="Continue the task from where it stopped."; fi
+	say "invocation $n ($([ -z "$SESSION" ] && echo fresh || echo resume)) state=$(state)"
+	(cd "$REPO" && PI_TELEMETRY=0 timeout "${RUN_TIMEOUT:-14400}" "$ROOT/bin/scoby" -p "${ARGS[@]}" -- "$P" < /dev/null >> "$STATE/answer.md" 2>> "$LOG")
+	say "invocation $n ended (exit $?)"
+	[ -n "$SESSION" ] || SESSION=$(ls -t "$STATE"/sessions/*.jsonl 2>/dev/null | head -1)
+	say "state=$(state) session=$SESSION"
+done
+final=$(state)
+say "finished: ferment=$final after $n invocation(s), $(( ($(date +%s) - START) / 60 )) min"
+[ "$final" = complete ]

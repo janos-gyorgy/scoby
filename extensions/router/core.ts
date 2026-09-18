@@ -139,6 +139,19 @@ export function validateConfig(cfg: RouterConfig): string[] {
 	return errors;
 }
 
+/**
+ * A repo-local `.scoby.json` lays over the global config: top-level keys replace, and the
+ * `compaction` / `ferment` / `finish` / `notify` / `failover` / `policy` objects merge one level deep,
+ * so a repo can say just `{"finish":{"gates":["npx tsc --noEmit"]}}` and keep the global connections.
+ */
+export function mergeConfig(base: RouterConfig, over: Partial<RouterConfig>): RouterConfig {
+	const out: any = { ...base, ...over };
+	for (const key of ["compaction", "ferment", "finish", "notify", "failover", "policy"] as const) {
+		if ((base as any)[key] && (over as any)[key]) out[key] = { ...(base as any)[key], ...(over as any)[key] };
+	}
+	return out as RouterConfig;
+}
+
 export type ErrorKind = "rate_limit" | "overloaded" | "auth" | "network" | "provider_error" | "other";
 
 export interface Classified {
