@@ -13,6 +13,9 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 export PATH="$HOME/.local/node22/bin:$PATH"
+# the capacity probe needs the NIM key too, not just pi (bin/scoby exports them for pi)
+key() { kubectl -n scoby get secret "$1" -o "jsonpath={.data.$2}" 2>/dev/null | base64 -d; }
+export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$(key scoby-llm-keys nvidia)}"
 REPO=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 STATE="$REPO/.scoby"; mkdir -p "$STATE/sessions"
 LOG="$STATE/run.log"
