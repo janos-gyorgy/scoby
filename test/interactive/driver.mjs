@@ -19,7 +19,7 @@ const pi = spawn(path.join(root, "node_modules/.bin/pi"), ["--mode", "rpc", "--s
 	stdio: ["pipe", "pipe", "pipe"],
 });
 const send = (o) => pi.stdin.write(JSON.stringify(o) + "\n");
-const seen = { selects: [], inputs: 0, widgets: [], notifies: [] };
+const seen = { selects: [], inputs: 0, widgets: [], notifies: [], titles: [], statuses: [] };
 let approvals = 0, finished = false, chatAnswered = false, phase = "build";
 
 // strict JSONL: split on \n only (the docs warn readline also splits on U+2028/9)
@@ -56,6 +56,8 @@ function handle(m) {
 			seen.widgets.push(text);
 			if (text.includes("waiting for models") && fs.existsSync(downFlag)) setTimeout(() => fs.rmSync(downFlag, { force: true }), 1500);
 		}
+		if (m.method === "setTitle") seen.titles.push(m.title);
+		if (m.method === "setStatus" && m.statusText) seen.statuses.push(m.statusText);
 		if (m.method === "notify") {
 			seen.notifies.push(m.message);
 			if (m.message.includes("build finished")) finished = true;
@@ -77,7 +79,9 @@ const tick = setInterval(() => {
 		pi.kill();
 		ntfy.close();
 		const branch = spawnSync("git", ["branch", "--show-current"], { cwd: work, encoding: "utf8" }).stdout.trim();
-		fs.writeFileSync(path.join(work, "..", "result.json"), JSON.stringify({ seen, pushes, branch, finished, chatAnswered, seconds: Math.round((Date.now() - started) / 1000) }, null, 1));
+		const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+	const welcomeEntries = walk(sessions).filter((f) => f.endsWith(".jsonl")).flatMap((f) => fs.readFileSync(f, "utf8").split("\n")).filter((l) => l.includes('"customType":"scoby-welcome"')).length;
+	fs.writeFileSync(path.join(work, "..", "result.json"), JSON.stringify({ seen, pushes, branch, finished, chatAnswered, welcomeEntries, seconds: Math.round((Date.now() - started) / 1000) }, null, 1));
 		process.exit(0);
 	}
 }, 250);

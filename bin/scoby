@@ -12,4 +12,7 @@ export GEMINI_API_KEY="${GEMINI_API_KEY:-$(key scoby-llm-keys gemini)}"
 export GROQ_API_KEY="${GROQ_API_KEY:-$(key scoby-llm-keys groq)}"
 export NTFY_TOKEN="${NTFY_TOKEN:-$(key scoby-ntfy publish-token)}"
 [ -n "$NVIDIA_API_KEY$GEMINI_API_KEY$GROQ_API_KEY" ] || echo "scoby: no provider key in the environment or ~/.config/scoby/env" >&2
-exec "$ROOT/node_modules/.bin/pi" -e "$ROOT/extensions/scoby/index.ts" "$@"
+# the scoby theme (themes/scoby.json) for this run, unless you pass your own or set SCOBY_THEME=""
+THEME=()
+case " $* " in *" --use-theme "*|*" --theme "*|*" --no-themes "*) ;; *) [ "${SCOBY_THEME-scoby}" = "" ] || THEME=(--theme "$ROOT/themes" --use-theme "${SCOBY_THEME-scoby}") ;; esac
+exec "$ROOT/node_modules/.bin/pi" "${THEME[@]}" -e "$ROOT/extensions/scoby/index.ts" "$@"

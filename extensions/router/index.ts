@@ -48,6 +48,8 @@ export interface RouterHandle {
 	chainFor(role: string): Target[];
 	/** report a failure on a target used outside the session (e.g. a fold call) */
 	markFailed(raw: string, errorMessage: string): void;
+	/** every role with its chain and which targets are cooling down right now (for the UI) */
+	health(): { role: string; targets: { raw: string; cooling: boolean }[] }[];
 }
 
 /** Standalone use: `pi -e extensions/router/index.ts`. The scoby entry composes it with compaction. */
@@ -243,6 +245,10 @@ export function setupRouter(pi: ExtensionAPI, cfg: RouterConfig, configPath: str
 			const now = Date.now();
 			return [...router.targets(r)].sort((a, b) => Math.max(0, router.coolingUntil(a.raw) - now) - Math.max(0, router.coolingUntil(b.raw) - now));
 		},
+		health: () => Object.keys(cfg.roles).map((role) => ({
+			role,
+			targets: router.targets(role).map((t) => ({ raw: t.raw, cooling: router.coolingUntil(t.raw) > Date.now() })),
+		})),
 		markFailed: (raw: string, errorMessage: string) => {
 			const verdict = classifyError(errorMessage);
 			if (verdict.failover) router.markFailed(raw, verdict.kind, Date.now());

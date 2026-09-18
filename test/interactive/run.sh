@@ -40,6 +40,7 @@ const checks = {
   "phone: plan-ready (high) per draft": r.pushes.filter((p) => p.title.startsWith("scoby: plan ready") && p.priority === 4).length === 2,
   "phone: both phase grades, the wait (low), and finished": r.pushes.filter((p) => /— [ABC]$/.test(p.title)).length === 2 && r.pushes.some((p) => p.title.includes("waiting") && p.priority === 2) && r.pushes.some((p) => p.title === "scoby finished"),
   "phone: token sent": r.pushes.every((p) => p.auth === "Bearer test-token"),
+  "TUI: terminal title, footer status with the model and the step, welcome card once in the session": r.seen.titles.some((t) => t.startsWith("scoby · ")) && r.seen.statuses.some((t) => /^builder → agent-model/.test(t)) && r.seen.statuses.some((t) => /step-\d/.test(t)) && r.welcomeEntries === 1,
   "a later question stayed plain chat (no new plan)": r.chatAnswered && plans.length === 2 && reqs.some((q) => q.kind === "agent" && q.chat && !q.brief),
 };
 for (const [k, v] of Object.entries(checks)) console.log(`${v ? "ok  " : "FAIL"} ${k}`);

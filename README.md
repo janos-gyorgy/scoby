@@ -56,6 +56,14 @@ scoby
 
 `/ferment` shows the plan and where the build is. `/role`, `/router` show and switch models.
 
+**What you see.** A welcome card when the session opens (the jar, repo and branch, each role's chain
+with any model that is cooling down, the budget, ntfy on or off, and whether a build is paused here);
+`/scoby` prints it again. The footer keeps `builder → deepseek-v4-flash · 24K/32K · step-2.3 · A`
+current on every request. While a step runs the working line names the step. The approved plan,
+each phase grade with its rationale, and the finish land as cards in the transcript, so they survive
+approval and scrolling. The `scoby` theme (magenta accent, amber warnings) is picked per run by
+`bin/scoby`; pass your own `--use-theme` or set `SCOBY_THEME=""` to keep pi's.
+
 **Unattended** (no terminal, plan accepted as is):
 
 ```

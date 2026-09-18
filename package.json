@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "A free Kimchi: pi extensions for role routing across free-tier APIs, with budget-first compaction",
   "scripts": {
-    "test": "node --experimental-strip-types --no-warnings --test extensions/router/core.test.ts extensions/compaction/shaper.test.ts extensions/compaction/fold.test.ts extensions/guard/gates.test.ts extensions/ferment/core.test.ts extensions/ferment/lock.test.ts extensions/notify/ntfy.test.ts",
+    "test": "node --experimental-strip-types --no-warnings --test extensions/router/core.test.ts extensions/compaction/shaper.test.ts extensions/compaction/fold.test.ts extensions/guard/gates.test.ts extensions/ferment/core.test.ts extensions/ferment/lock.test.ts extensions/notify/ntfy.test.ts extensions/ui/render.test.ts",
     "test:router": "test/router/run.sh",
     "test:failover": "test/failover/run.sh",
     "test:compaction": "test/compaction/run.sh",
@@ -29,6 +29,9 @@
   "pi": {
     "extensions": [
       "./extensions/scoby/index.ts"
+    ],
+    "themes": [
+      "./themes"
     ]
   },
   "repository": "github:janos-gyorgy/scoby",

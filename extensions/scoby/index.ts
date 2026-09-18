@@ -5,6 +5,7 @@ import { loadConfig, setupRouter } from "../router/index.ts";
 import { setupCompaction } from "../compaction/index.ts";
 import { setupGuard } from "../guard/index.ts";
 import { setupFerment } from "../ferment/index.ts";
+import { setupUi } from "../ui/index.ts";
 
 export default function scoby(pi: ExtensionAPI) {
 	const loaded = loadConfig();
@@ -14,7 +15,9 @@ export default function scoby(pi: ExtensionAPI) {
 	// after it) must see that brief so it counts against the budget. The other way round, the brief
 	// rode on top of an already-fitted request — 8 requests went over budget in ferment-32k-r4.
 	if (loaded.cfg.ferment?.enabled) setupFerment(pi, loaded.cfg, router);
-	setupCompaction(pi, loaded.cfg, router);
+	const compaction = setupCompaction(pi, loaded.cfg, router);
 	// ferment owns the gates when it runs; the finish guard is the single-shot equivalent
 	if (!loaded.cfg.ferment?.enabled) setupGuard(pi, loaded.cfg);
+	// last: the UI reads the entries the modules above append
+	setupUi(pi, loaded.cfg, router, compaction);
 }
