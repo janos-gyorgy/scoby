@@ -139,7 +139,7 @@ Both on NVIDIA NIM's free tier, DeepSeek V4 Flash as builder, Gemini 3.5 Flash (
 
 | Build | Time | Requests | Grades | Notes |
 |---|---|---|---|---|
-| [crowded](https://github.com/janos-gyorgy/crowded): make the Bash star magenta with a subtle pulse (canvas app) | 31 min | 31, 0 errors | D → fix → A, A, A | plan approved in the TUI; judge caught that only the label was coloured, not the star; the fix step fixed it |
+| crowded (a private canvas site): make the Bash star magenta with a subtle pulse (canvas app) | 31 min | 31, 0 errors | D → fix → A, A, A | plan approved in the TUI; judge caught that only the label was coloured, not the star; the fix step fixed it |
 | [corvid](https://github.com/janos-gyorgy/corvid): ntfy push when a bird run ends, in the chassis + rookery | see the blog | | | unattended via `scoby-run` |
 
 Bench (`bench/`), the Kimchi trial task on a Brew Buddy clone, 11 steps: budgets held (max 15.7K of
