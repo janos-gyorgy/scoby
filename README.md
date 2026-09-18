@@ -140,7 +140,7 @@ Both on NVIDIA NIM's free tier, DeepSeek V4 Flash as builder, Gemini 3.5 Flash (
 | Build | Time | Requests | Grades | Notes |
 |---|---|---|---|---|
 | crowded (a private canvas site): make the Bash star magenta with a subtle pulse (canvas app) | 31 min | 31, 0 errors | D → fix → A, A, A | plan approved in the TUI; judge caught that only the label was coloured, not the star; the fix step fixed it |
-| [corvid](https://github.com/janos-gyorgy/corvid): ntfy push when a bird run ends, in the chassis + rookery | see the blog | | | unattended via `scoby-run` |
+| [corvid](https://github.com/janos-gyorgy/corvid): ntfy push when a bird run ends, in the chassis + rookery | 113 min | 70, 0 errors, max 30.4K of 32K | A, A, A | unattended via `scoby-run`; judge and gates missed that JSON posted to a topic URL arrives as plain text — a test against the real server found it, fixed in a second run |
 
 Bench (`bench/`), the Kimchi trial task on a Brew Buddy clone, 11 steps: budgets held (max 15.7K of
 16K, 30.4K of 32K); the patient run survived 7 provider outages over 8 invocations and finished
